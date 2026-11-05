@@ -317,6 +317,14 @@ input[type=date].inp,input[type=time].inp{min-width:0}
 .toggle{display:inline-flex;gap:2px;background:var(--surface-2);border-radius:12px;padding:3px}
 .toggle button{border:0;background:transparent;border-radius:9px;padding:7px 14px;font-size:14px;font-weight:600;color:var(--muted)}
 .toggle button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.prs{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.prow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.prow .pn{display:block;font-weight:600;overflow-wrap:anywhere}
+.prow .ps{display:block;color:var(--muted);font-size:13.5px;margin-top:2px;overflow-wrap:anywhere}
+.prow .pv{text-align:right;white-space:nowrap;flex:none}
+.prow .pv small{display:block;color:var(--muted);font-size:12.5px}
+.ptot{border-top:2px solid var(--line)}
+.ptot .pn,.ptot .pv b{font-size:16px}
 .summary{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--muted)}
 .summary b{color:var(--ink);font-weight:600}
 .bar{height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden}
@@ -830,6 +838,12 @@ const DEMO_SRV = {
     db.reservas.forEach(x => { if (x.serie===serie && x.data >= r.data) x.serie = ""; });
     return {...ok(p), removidas:antes-db.reservas.length};
   },
+  relatorio(d, p){
+    const ok = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s||""));
+    if (!ok(d.de) || !ok(d.ate) || d.de > d.ate) return {ok:false, erro:"Escolha um período válido."};
+    if (parse(d.ate) - parse(d.de) > 400*864e5) return {ok:false, erro:"Escolha um período de até 13 meses."};
+    return {ok:true, reservas:db.reservas.filter(r => r.p===p && r.data>=d.de && r.data<=d.ate).map(r => ({data:r.data, hora:r.hora, duracao:r.duracao, servico:r.servico, preco:r.preco, cliente:r.cliente, telefone:r.telefone, status:r.status, presenca:r.presenca}))};
+  },
   nota(d, p){ const k = p+"|"+dig(d.telefone), t = String(d.texto||"").trim().slice(0,500); if (t) db.notas[k] = t; else delete db.notas[k]; return ok(p); },
   bloquear(d, p){
     if (!d.inteiro && toMin(d.fim) <= toMin(d.ini)) return {ok:false, erro:"O fim precisa ser depois do início."};
@@ -1280,7 +1294,7 @@ function renderFeito(app, head){
 
 /* ======================== PAINEL DA DONA ======================== */
 const novoPA = () => ({token:"", d:null, carregando:false, aba:"inicio", diaVer:null, semAg:0, diaAg:hoje(), sel:null, abrir:null, motivo:"", msgs:{}, repetir:null, nota:null, notaTxt:"",
-  bloq:false, bf:{inteiro:false, ini:"08:00", fim:"09:00", motivo:""}, busca:"", cli:null, aj:null, sj:{atual:"", nova:"", conf:""}, login:{email:"", senha:"", ver:false, manter:true, erro:"", esqueci:false, enviando:false}, flash:null, verRec:false, novo:null, mover:null, avisos:{}, mes:0, confTodos:false, editCli:null, tg:null});
+  bloq:false, bf:{inteiro:false, ini:"08:00", fim:"09:00", motivo:""}, busca:"", cli:null, aj:null, sj:{atual:"", nova:"", conf:""}, login:{email:"", senha:"", ver:false, manter:true, erro:"", esqueci:false, enviando:false}, flash:null, verRec:false, novo:null, mover:null, avisos:{}, mes:0, rel:{de:"", ate:"", lista:null, erro:"", carregando:false, semMarca:false, n:0}, confTodos:false, editCli:null, tg:null});
 let PA = novoPA();
 async function bootPainel(){
   if (PA.d){ render(); return; }
@@ -1787,7 +1801,81 @@ function barras(itens, fmt){
   const max = Math.max(1, ...itens.map(i => i.v));
   return `<div class="bars">${itens.map(i => `<div class="brow"><span class="bl">${esc(i.l)}</span><span class="bt"><i style="width:${Math.max(i.v ? 3 : 0, i.v/max*100)}%"></i></span><span class="bv tnum">${fmt ? fmt(i) : i.v}</span></div>`).join("")}</div>`;
 }
+/* relatório por período: quem foi atendido, quais serviços e quanto recebeu de cada pessoa */
+const togMes = () => `<div class="toggle" role="group" aria-label="Período do relatório"><button type="button" aria-pressed="${PA.mes===-1}" onclick="PA.mes=-1;render()">Mês passado</button><button type="button" aria-pressed="${PA.mes===0}" onclick="PA.mes=0;render()">Este mês</button><button type="button" aria-pressed="${PA.mes==='per'}" onclick="abrirPeriodo()">Período</button></div>`;
+function abrirPeriodo(){
+  const R = PA.rel; PA.mes = "per";
+  if (!R.de || !R.ate){ const t = parse(hoje()); R.de = ymd(new Date(t.getFullYear(), t.getMonth(), 1, 12)); R.ate = hoje(); }
+  carregarPeriodo();
+}
+function periodoRapido(k){
+  const t = parse(hoje()), R = PA.rel;
+  if (k==="este"){ R.de = ymd(new Date(t.getFullYear(), t.getMonth(), 1, 12)); R.ate = hoje(); }
+  if (k==="passado"){ R.de = ymd(new Date(t.getFullYear(), t.getMonth()-1, 1, 12)); R.ate = ymd(new Date(t.getFullYear(), t.getMonth(), 0, 12)); }
+  if (k==="30"){ R.de = addD(hoje(), -29); R.ate = hoje(); }
+  if (k==="90"){ R.de = addD(hoje(), -89); R.ate = hoje(); }
+  carregarPeriodo();
+}
+async function carregarPeriodo(){
+  const R = PA.rel, ok = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+  R.lista = null; R.erro = "";
+  if (!ok(R.de) || !ok(R.ate)){ R.erro = "Escolha as duas datas."; R.carregando = false; render(); return; }
+  if (R.de > R.ate){ R.erro = "A data inicial precisa ser antes da final."; R.carregando = false; render(); return; }
+  if (parse(R.ate) - parse(R.de) > 400*864e5){ R.erro = "Escolha um período de até 13 meses."; R.carregando = false; render(); return; }
+  const n = ++R.n; R.carregando = true; render();
+  const r = await api("relatorio", {token:PA.token, negocio:PA.negocio, de:R.de, ate:R.ate});
+  if (n !== R.n) return;
+  R.carregando = false;
+  if (!r.ok){ if (r.sessao){ await sair(true); toast(r.erro); return; } R.erro = r.erro || "Não deu certo. Tente de novo."; render(); return; }
+  R.lista = r.reservas; render();
+}
+function agruparPeriodo(){
+  const R = PA.rel, todas = R.lista || [];
+  const veio = todas.filter(r => r.presenca==="veio");
+  const sem = todas.filter(r => r.status==="aprovado" && !r.presenca && terminou(r));
+  const cont = R.semMarca ? veio.concat(sem) : veio, g = {};
+  cont.forEach(r => {
+    const k = dig(r.telefone) || r.cliente, x = g[k] = g[k] || {nome:r.cliente, tel:r.telefone, n:0, tot:0, sv:{}, datas:[]};
+    x.n++; x.tot += r.preco; x.sv[r.servico] = (x.sv[r.servico]||0)+1; x.datas.push(r.data);
+  });
+  const grupos = Object.values(g).map(x => ({...x, datas:x.datas.sort()})).sort((a,b) => b.tot-a.tot || b.n-a.n || a.nome.localeCompare(b.nome, "pt-BR"));
+  return {cont, grupos, sem, faltas: todas.filter(r => r.presenca==="faltou").length, total: cont.reduce((s,r) => s+r.preco, 0)};
+}
+function baixarCsvPeriodo(){
+  const R = PA.rel, A = agruparPeriodo();
+  const cel = v => { v = String(v==null ? "" : v); if (/^[=+\-@\t\r]/.test(v)) v = "'"+v; return '"'+v.replace(/"/g,'""')+'"'; };
+  const brl = v => String(Number(v).toFixed(2)).replace(".", ",");
+  const linhas = [["Pessoa","WhatsApp","Atendimentos","Serviços","Datas","Total recebido (R$)"].map(cel).join(";")]
+    .concat(A.grupos.map(x => [x.nome, telF(x.tel), x.n, Object.keys(x.sv).map(s => s+" x"+x.sv[s]).join(" | "), x.datas.map(dataCurta).join(" "), brl(x.tot)].map(cel).join(";")))
+    .concat([["TOTAL","",A.cont.length,"","",brl(A.total)].map(cel).join(";")]);
+  const blob = new Blob(["﻿"+linhas.join("\r\n")], {type:"text/csv;charset=utf-8"}), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "relatorio-"+R.de+"-a-"+R.ate+".csv"; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function telaPeriodo(){
+  const R = PA.rel, dl = s => { const d = parse(s); return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear(); };
+  let h = cabecalho("Relatório", R.de && R.ate && !R.erro ? dl(R.de)+" até "+dl(R.ate) : "Escolha as datas", togMes());
+  h += `<section class="panel"><h3>Período</h3><div class="two"><div class="field"><label for="relDe">De</label><input class="inp" id="relDe" type="date" value="${esc(R.de)}" max="${esc(R.ate||"")}" onchange="PA.rel.de=this.value;carregarPeriodo()"></div>
+      <div class="field"><label for="relAte">Até</label><input class="inp" id="relAte" type="date" value="${esc(R.ate)}" min="${esc(R.de||"")}" onchange="PA.rel.ate=this.value;carregarPeriodo()"></div></div>
+    <div class="prs"><button class="btn btn-soft btn-sm" type="button" onclick="periodoRapido('este')">Este mês</button><button class="btn btn-soft btn-sm" type="button" onclick="periodoRapido('passado')">Mês passado</button><button class="btn btn-soft btn-sm" type="button" onclick="periodoRapido('30')">Últimos 30 dias</button><button class="btn btn-soft btn-sm" type="button" onclick="periodoRapido('90')">Últimos 90 dias</button></div></section>`;
+  if (R.erro) return h + `<div class="alert"><div>${esc(R.erro)}</div></div>`;
+  if (R.carregando || !R.lista) return h + `<div class="skel" style="height:220px"></div>`;
+  const A = agruparPeriodo(), q = A.cont.length;
+  h += `<div class="stats"><div class="stat"><span>Pessoas atendidas</span><b>${A.grupos.length}</b><small>no período</small></div>
+    <div class="stat"><span>Atendimentos</span><b>${q}</b><small>${R.semMarca ? "com e sem presença marcada" : "com presença marcada"}</small></div>
+    <div class="stat"><span>Recebido</span><b>${reaisC(A.total)}</b><small>soma dos atendimentos</small></div>
+    <div class="stat ${A.faltas ? "hot" : ""}"><span>Faltas</span><b>${A.faltas}</b><small>não entram na conta</small></div></div>`;
+  if (A.sem.length) h += `<div class="alert"><div><b>${A.sem.length} ${A.sem.length===1?"atendimento sem presença marcada":"atendimentos sem presença marcada"}.</b> ${R.semMarca ? "Eles estão sendo contados agora." : "Eles não entram na lista até você marcar que a pessoa veio."}</div><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-sec btn-sm" type="button" onclick="PA.rel.semMarca=!PA.rel.semMarca;render()">${R.semMarca ? "Contar só quem veio" : "Contar mesmo assim"}</button><button class="btn btn-soft btn-sm" type="button" onclick="PA.aba='agenda';PA.semAg=0;PA.diaAg=hoje();render()">Ir pra agenda</button></div></div>`;
+  if (!A.grupos.length) return h + `<div class="empty"><b>Ninguém atendido nesse período</b>Marque a presença na agenda para os atendimentos aparecerem aqui.</div>`;
+  h += `<section class="panel"><h3>Quem foi atendido</h3><p>Cada pessoa com os serviços feitos, os dias e quanto rendeu.</p>
+    ${A.grupos.map(x => `<div class="prow"><div><span class="pn">${esc(x.nome)}</span><span class="ps">${Object.keys(x.sv).map(s => esc(s)+" × "+x.sv[s]).join(" · ")}</span><span class="ps tnum">${x.datas.map(dataCurta).join(", ")}</span></div><div class="pv"><b class="tnum">${reais(x.tot)}</b><small>${x.n} ${x.n===1?"atendimento":"atendimentos"}</small></div></div>`).join("")}
+    <div class="prow ptot"><div><span class="pn">Total</span></div><div class="pv"><b class="tnum">${reais(A.total)}</b><small>${q} ${q===1?"atendimento":"atendimentos"}</small></div></div></section>`;
+  if (A.total===0) h += `<p class="hint">O valor está zerado porque os serviços estão sem preço. Cadastre o preço em Ajustes, em Serviços. Atendimentos já feitos continuam com o preço de quando foram marcados.</p>`;
+  h += `<div class="row"><button class="btn btn-sec btn-sm" type="button" onclick="baixarCsvPeriodo()">${ic("copy")} Baixar planilha (CSV)</button></div>`;
+  return h;
+}
 function telaRelatorio(){
+  if (PA.mes==="per") return telaPeriodo();
   const t = parse(hoje()), m0 = new Date(t.getFullYear(), t.getMonth()+PA.mes, 1, 12), ini = ymd(m0), fim = ymd(new Date(m0.getFullYear(), m0.getMonth()+1, 0, 12)), atual = PA.mes===0;
   const doMes = PA.d.reservas.filter(r => r.data >= ini && r.data <= fim);
   const veio = doMes.filter(r => r.presenca==="veio"), faltou = doMes.filter(r => r.presenca==="faltou");
@@ -1801,7 +1889,7 @@ function telaRelatorio(){
   const org = {}; validos.forEach(r => { const k = r.origem || "direto"; org[k] = (org[k]||0)+1; });
   const sv = {}; validos.forEach(r => { const x = (sv[r.servico] = sv[r.servico] || {l:r.servico, v:0, fat:0}); x.v++; if (r.presenca==="veio") x.fat += r.preco; });
   const wd = [1,2,3,4,5,6,0].filter(d => PC().dias.includes(d) || validos.some(r => parse(r.data).getDay()===d)).map(d => ({l:DIAS_L[d].replace("-feira",""), v:validos.filter(r => parse(r.data).getDay()===d).length}));
-  let h = cabecalho("Relatório", cap(MES_L[m0.getMonth()])+" de "+m0.getFullYear(), `<div class="toggle" role="group" aria-label="Mês"><button type="button" aria-pressed="${PA.mes===-1}" onclick="PA.mes=-1;render()">Mês passado</button><button type="button" aria-pressed="${atual}" onclick="PA.mes=0;render()">Este mês</button></div>`);
+  let h = cabecalho("Relatório", cap(MES_L[m0.getMonth()])+" de "+m0.getFullYear(), togMes());
   h += `<div class="stats"><div class="stat"><span>Faturamento</span><b>${reaisC(soma(veio))}</b><small>${atual && falta.length ? "+ "+reaisC(soma(falta))+" ainda agendados" : "de quem compareceu"}</small></div>
     <div class="stat"><span>Atendimentos</span><b>${veio.length}</b><small>realizados</small></div>
     <div class="stat ${taxa >= 15 ? "hot" : ""}"><span>Faltas</span><b>${taxa}%</b><small>${faltou.length} ${faltou.length===1?"falta":"faltas"}</small></div>
@@ -1866,7 +1954,7 @@ function telaAjustes(){
   const adm = PA.d.conta && PA.d.conta.admin, dona = adm ? PA.d.conta.negocios.find(n => n.p===PA.d.perfil.p) : null;
   if (adm) h += `<section class="panel"><h3>Acesso de ${esc(PC().nome)}</h3><p>Ela entra com ${esc(PA.d.perfil.login)}. ${dona && dona.senhaProvisoria ? "Ainda usa a senha provisória." : "Já trocou a senha provisória."}</p>
     <p class="hint">Se ela esquecer a senha ou travar o login, volte a senha para a provisória do código. Ela é desconectada dos aparelhos e troca de novo no próximo acesso.</p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ${PA.confReset ? "btn-bad" : "btn-sec"}" type="button" onclick="resetarSenhaDona()">${ic("lock")} ${PA.confReset ? "Confirmar: voltar para a provisória" : "Voltar a senha dela para a provisória"}</button>${PA.confReset ? `<button class="btn btn-ghost" type="button" onclick="PA.confReset=false;render()">Cancelar</button>` : ""}</div></section>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ${PA.confReset ? "btn-bad" : "btn-sec"}" style="white-space:normal;max-width:100%" type="button" onclick="resetarSenhaDona()">${ic("lock")} ${PA.confReset ? "Confirmar: voltar para a provisória" : "Voltar a senha dela para a provisória"}</button>${PA.confReset ? `<button class="btn btn-ghost" type="button" onclick="PA.confReset=false;render()">Cancelar</button>` : ""}</div></section>`;
   h += `<section class="panel"><h3>${adm ? "Sua conta de administrador" : "Conta e segurança"}</h3><p>Você entra com ${esc(PA.d.conta ? PA.d.conta.login : PA.d.perfil.login)}. Use pelo menos 8 caracteres. Ao trocar a senha, os outros aparelhos conectados saem do painel.</p>
     <div class="grid3"><div class="field"><label for="sjA">Senha atual</label><input class="inp" id="sjA" type="password" autocomplete="current-password" value="${esc(PA.sj.atual)}" oninput="PA.sj.atual=this.value"></div>
       <div class="field"><label for="sjN">Nova senha</label><input class="inp" id="sjN" type="password" autocomplete="new-password" value="${esc(PA.sj.nova)}" oninput="PA.sj.nova=this.value"></div>
