@@ -329,6 +329,7 @@ input[type=date].inp,input[type=time].inp{min-width:0}
 .rpt-wrap{min-height:100vh;background:#E9EBEF;padding:0 0 40px}
 .rpt-bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 16px;background:#111827;color:#fff}
 .rpt-bar span{font-size:14px;opacity:.85}
+@media (max-width:380px){.rpt-bar span{display:none}}
 .rpt-bar .btn{font-size:14px}
 .rpt{max-width:800px;margin:20px auto 0;background:#fff;color:#111827;padding:36px 40px;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.12);font-size:13.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .rpt h1{font-size:22px;margin:0;color:#111827}
@@ -344,21 +345,22 @@ input[type=date].inp,input[type=time].inp{min-width:0}
 .rpt .r-txt{background:#F6F7F9;border-left:3px solid var(--rc);border-radius:6px;padding:12px 14px;margin-top:18px}
 .rpt .r-txt p{margin:0 0 6px;color:#1F2937}
 .rpt .r-txt p:last-child{margin:0}
-.rpt .r-two{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.rpt .r-hb{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,2fr) max-content;gap:6px 10px;align-items:center;font-size:12.5px}
-.rpt .r-hb .t{height:10px;background:#EEF0F3;border-radius:5px;overflow:hidden}
-.rpt .r-hb .t i{display:block;height:100%;background:var(--rc);border-radius:5px}
-.rpt .r-hb .n{font-variant-numeric:tabular-nums;color:#374151;white-space:nowrap}
-.rpt .r-hb .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpt .r-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+.rpt .r-hb{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1.5fr) max-content;gap:6px 10px;align-items:center;font-size:12.5px}
+.rpt .r-hb .hb-t{height:10px;background:#EEF0F3;border-radius:5px;overflow:hidden}
+.rpt .r-hb .hb-t i{display:block;height:100%;background:var(--rc);border-radius:5px}
+.rpt .r-hb .hb-n{font-variant-numeric:tabular-nums;color:#374151;white-space:nowrap}
+.rpt .r-hb .hb-l{overflow-wrap:anywhere;line-height:1.3}
 .rpt table{width:100%;border-collapse:collapse;font-size:12.5px}
 .rpt th{text-align:left;font-weight:600;color:#6B7280;font-size:11.5px;border-bottom:1px solid #D1D5DB;padding:6px 6px 6px 0}
 .rpt td{border-bottom:1px solid #EEF0F3;padding:7px 6px 7px 0;vertical-align:top}
-.rpt td.v,.rpt th.v{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;padding-right:0}
+.rpt td.v,.rpt th.v{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;padding-right:0;padding-left:14px}
 .rpt tr{break-inside:avoid}
-.rpt tfoot td{font-weight:700;border-bottom:0;border-top:2px solid #D1D5DB}
+.rpt tr.tot td{font-weight:700;border-bottom:0;border-top:2px solid #D1D5DB}
 .rpt .r-sub{color:#6B7280;font-size:11.5px}
+.rpt .r-svm{display:none;font-size:12px;color:#374151}
 .rpt .r-foot{margin-top:24px;color:#9CA3AF;font-size:11px;text-align:center}
-@media (max-width:640px){.rpt{margin:0;border-radius:0;padding:22px 16px;box-shadow:none}.rpt .r-kpi{grid-template-columns:1fr 1fr}.rpt .r-two{grid-template-columns:1fr;gap:4px}}
+@media (max-width:640px){.rpt{margin:0;border-radius:0;padding:22px 16px;box-shadow:none}.rpt .r-kpi{grid-template-columns:1fr 1fr}.rpt .r-two{grid-template-columns:minmax(0,1fr);gap:4px}.rpt .r-svc{display:none}.rpt .r-svm{display:block}.rpt th[style]{width:auto!important}}
 @media print{
   @page{size:A4;margin:14mm}
   html,body{background:#fff!important}
@@ -366,7 +368,11 @@ input[type=date].inp,input[type=time].inp{min-width:0}
   .rpt-wrap{background:#fff;padding:0;min-height:0}
   .rpt{box-shadow:none;margin:0;max-width:none;padding:0;border-radius:0}
   .rpt .r-kpi{grid-template-columns:repeat(4,1fr)}
-  .rpt .r-two{grid-template-columns:1fr 1fr}
+  .rpt .r-two{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .rpt .r-svc{display:table-cell}
+  .rpt .r-svm{display:none}
+  .rpt th[style]{width:44%!important}
+  .rpt .r-kpi div,.rpt .r-txt,.rpt svg,.rpt .r-two{break-inside:avoid}
 }
 .summary{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--muted)}
 .summary b{color:var(--ink);font-weight:600}
@@ -634,10 +640,10 @@ const PADRAO = {
   estetica:{ nome:"Mônica Leitte Estúdio Prime", cor:"#9A6240", login:"studio@horamarcada.app", whatsapp:"5516994053838", discreto:false,
     dias:[2,3,4,5,6], abre:"08:00", fecha:"19:00", horarios:{"2":{abre:"10:00",fecha:"19:00"},"3":{abre:"10:00",fecha:"19:00"},"4":{abre:"08:00",fecha:"18:20"},"5":{abre:"08:00",fecha:"18:20"},"6":{abre:"08:00",fecha:"15:20"}}, almoco:{ativo:false, ini:"12:00", fim:"13:00"}, passo:15, intervalo:10, antecedenciaHoras:2, semanasAFrente:4, reservada:true, sugestoes:4,
     cancelarAteHoras:24, lembreteEmail:true, linkOnline:"", linkAvaliacao:"",
-    endereco:"Rua Abílio Rebordões, 64, Salão Classic, Alto da Boa Vista, Ribeirão Preto/SP", agendamentoOnline:true, fecharFeriados:true, fecharFacultativos:false, chavePix:"", sinalValor:0, sinalPara:"ninguem",
+    endereco:"Rua Abílio Rebordões, 64, Salão Classic, Alto da Boa Vista, Ribeirão Preto/SP", agendamentoOnline:true, atendeOnline:false, fecharFeriados:true, fecharFacultativos:false, chavePix:"", sinalValor:0, sinalPara:"ninguem",
     servicos:[{id:"consultoria",nome:"Consultoria de Micropigmentação",duracao:40,preco:0,ativo:true,online:false},{id:"nanoblading",nome:"Nanoblading - Fio a Fio Natural",duracao:90,preco:1100,ativo:true,online:false},{id:"shadowline",nome:"Shadow Line - Técnica Híbrida",duracao:150,preco:1200,ativo:true,online:false},{id:"softshadow",nome:"Soft Shadow - Efeito Sombreado",duracao:150,preco:950,ativo:true,online:false},{id:"browlamination",nome:"Brow Lamination Premium (Inclui Design)",duracao:60,preco:200,ativo:true,online:false},{id:"browrepair",nome:"Brown Repair Therapy",duracao:40,preco:150,ativo:true,online:false},{id:"sobrancelha",nome:"Design de Sobrancelhas com Coloração",duracao:45,preco:110,ativo:true,online:false},{id:"spa",nome:"Spa das Sobrancelhas Método Mônica Leitte",duracao:40,preco:80,ativo:true,online:false},{id:"buco",nome:"Epilação de Buço",duracao:5,preco:20,ativo:true,online:false},{id:"rosto",nome:"Epilação do Rosto",duracao:10,preco:60,ativo:true,online:false},{id:"limpeza",nome:"Limpeza de Pele Profunda",duracao:150,preco:290,ativo:true,online:false},{id:"glow",nome:"Revitalização Facial Glow",duracao:30,preco:110,ativo:true,online:false},{id:"lash",nome:"Lash Lifting Premium",duracao:120,preco:200,ativo:true,online:false},{id:"nutrilips",nome:"Nutri Lips Therapy",duracao:30,preco:160,ativo:true,online:false},{id:"labial",nome:"Micropigmentação Labial Natural",duracao:150,preco:1100,ativo:true,online:false}] },
   psico:{ nome:"Isadora Monteverdi", cor:"#3D7A70", login:"consultorio@horamarcada.app", whatsapp:"5516981924529", discreto:true,
-    dias:[1,2,3,4,5], abre:"08:00", fecha:"19:00", almoco:{ativo:true, ini:"12:00", fim:"13:00"}, passo:60, intervalo:10, antecedenciaHoras:12, semanasAFrente:4, reservada:true, sugestoes:4,
+    dias:[1,2,3,4,5], abre:"08:00", fecha:"19:00", almoco:{ativo:true, ini:"12:00", fim:"13:00"}, passo:30, intervalo:10, antecedenciaHoras:12, semanasAFrente:4, reservada:true, sugestoes:4,
     cancelarAteHoras:24, lembreteEmail:true, linkOnline:"", linkAvaliacao:"",
     endereco:"R. Cel. Clementino, 604, Centro, Jardinópolis/SP", agendamentoOnline:false, fecharFeriados:true, fecharFacultativos:false, chavePix:"", sinalValor:0, sinalPara:"ninguem",
     servicos:[{id:"online",nome:"Sessão online",duracao:50,preco:150,ativo:true,online:true},{id:"presencial",nome:"Sessão presencial",duracao:50,preco:170,ativo:true,online:false}] }
@@ -650,7 +656,7 @@ const DEMO_NOMES = {
   psico:["Mariana Couto","Rafael Nunes","Juliana Prado","Carlos Menezes","Beatriz Lima","Thiago Ramos","Larissa Melo","Pedro Henrique Sá","Aline Castro"]
 };
 const DEMO_SERIES = { estetica:[["Bianca Rocha",5,"15:00","spa"]], psico:[["Mariana Couto",2,"18:00","online"],["Rafael Nunes",4,"09:00","presencial"],["Larissa Melo",1,"14:00","online"]] };
-const DBKEY = "hora-marcada-final-v8";
+const DBKEY = "hora-marcada-final-v9";
 const DEMO_BOT = "HoraMarcadaBot";
 let db = null, seq = 0;
 const nid = p => (p||"R")+Date.now().toString(36)+(seq++).toString(36);
@@ -933,7 +939,7 @@ const DEMO_SRV = {
   telegramDesligar(d, p){ delete db.telegram[p]; return ok(p); },
   avaliacao(d, p){ const r = mine(p, d.id); if (!r) return nao(); r.avaliacao = true; return ok(p); },
   ajustes(d, p){ const v = validarCfg(d.config); if (v) return {ok:false, erro:v}; const c = db.cfg[p];
-    ["nome","whatsapp","dias","abre","fecha","horarios","almoco","intervalo","antecedenciaHoras","servicos","discreto","reservada","sugestoes","cancelarAteHoras","lembreteEmail","linkOnline","linkAvaliacao","endereco","agendamentoOnline","fecharFeriados","fecharFacultativos","chavePix","sinalValor","sinalPara"].forEach(k => c[k] = clone(d.config[k])); return ok(p); },
+    ["nome","whatsapp","dias","abre","fecha","horarios","almoco","intervalo","passo","antecedenciaHoras","servicos","discreto","reservada","sugestoes","cancelarAteHoras","lembreteEmail","linkOnline","linkAvaliacao","endereco","agendamentoOnline","atendeOnline","fecharFeriados","fecharFacultativos","chavePix","sinalValor","sinalPara"].forEach(k => { if (d.config[k] !== undefined) c[k] = clone(d.config[k]); }); if (c.atendeOnline === false){ c.servicos.forEach(s => s.online = false); c.linkOnline = ""; } return ok(p); },
   resetarSenhaDona(d, p, s){ if (!s.admin) return {ok:false, erro:"Ação inválida."}; db.senhas[p] = DEMO_SENHA; Object.keys(db.sess).forEach(t => { if (sessDe(t).c===p) delete db.sess[t]; }); delete TRAVA_DEMO[p]; return ok(p); },
   senha(d, p, s){
     const conta = s.c;
@@ -1586,6 +1592,13 @@ async function confirmarMover(){
   const x = R(m.id); PA.mover = null; PA.avisos[x.id] = {titulo:"Avise o cliente da mudança", texto:msgMudanca(x)};
   mostrarCard(x.id, x.data); toast("Horário alterado"+(x.email && !DEMO ? ". O cliente também recebeu por e-mail." : ". Agora avise o cliente."));
 }
+/* encaixe: hora e minuto em listas (o campo "time" do Safari confunde no iPad/iPhone) */
+function selHoraLivre(o, pref, obj){
+  const [hh, mm] = (/^\d{2}:\d{2}$/.test(o.livre||"") ? o.livre : "08:00").split(":"), m5 = pad(Math.round(+mm/5)*5 % 60);
+  if (o.livre !== hh+":"+m5) o.livre = hh+":"+m5;
+  const hs = Array.from({length:24}, (_, i) => pad(i)), ms = Array.from({length:12}, (_, i) => pad(i*5));
+  return `<div class="row" style="gap:6px;flex-wrap:nowrap"><select class="inp tnum" id="${pref}Livre" aria-label="Hora" onchange="${obj}.livre=this.value+':'+${obj}.livre.slice(3)">${hs.map(x => `<option ${x===hh ? "selected" : ""}>${x}</option>`).join("")}</select><span aria-hidden="true" style="align-self:center">:</span><select class="inp tnum" aria-label="Minutos" onchange="${obj}.livre=${obj}.livre.slice(0,2)+':'+this.value">${ms.map(x => `<option ${x===m5 ? "selected" : ""}>${x}</option>`).join("")}</select></div>`;
+}
 function formHorario(o, pref){
   /* o: estado (PA.novo ou PA.mover); pref: prefixo do id e da função de recarga */
   const opts = o.horas===null ? `<div class="inp" style="color:var(--muted)">Carregando…</div>` : o.horas.length
@@ -1594,7 +1607,7 @@ function formHorario(o, pref){
   const obj = pref==="nv" ? "PA.novo" : "PA.mover", rec = pref==="nv" ? "carregarHorasNovo()" : "carregarHorasMover()";
   const fechado = !PC().dias.includes(parse(o.data).getDay());
   return `${o.dica ? `<p class="hint" style="color:var(--info)">${esc(o.dica)}</p>` : ""}<div class="two"><div class="field"><label for="${pref}Data">Dia</label><input class="inp" id="${pref}Data" type="date" min="${hoje()}" value="${o.data}" onchange="if(this.value){${obj}.data=this.value;${obj}.dica='';${rec}}"><p class="hint">${cap(dataLonga(o.data))}${fechado ? ". Você não atende nesse dia, só por encaixe." : ""}</p></div>
-      <div class="field"><label for="${o.encaixe ? pref+"Livre" : pref+"Hora"}">Horário</label>${o.encaixe ? `<input class="inp tnum" id="${pref}Livre" type="time" step="300" value="${o.livre}" oninput="${obj}.livre=this.value">` : opts}</div></div>
+      <div class="field"><label for="${o.encaixe ? pref+"Livre" : pref+"Hora"}">Horário</label>${o.encaixe ? selHoraLivre(o, pref, obj) : opts}</div></div>
     <label class="check"><input type="checkbox" ${o.encaixe ? "checked" : ""} onchange="${obj}.encaixe=this.checked;render()"><span>Encaixe: escolher qualquer horário, mesmo fora do expediente ou sem intervalo. Só não deixa encavalar com outro cliente.</span></label>`;
 }
 function formNovo(){
@@ -1948,7 +1961,7 @@ function colunasSvg(itens){
   });
   return s + `</svg>`;
 }
-const barrasPdf = (itens, fmt) => { const max = Math.max(1, ...itens.map(i => i.v)); return `<div class="r-hb">${itens.map(i => `<span class="l">${esc(i.l)}</span><span class="t"><i style="width:${i.v ? Math.max(3, i.v/max*100) : 0}%"></i></span><span class="n">${fmt ? fmt(i) : i.v}</span>`).join("")}</div>`; };
+const barrasPdf = (itens, fmt) => { const max = Math.max(1, ...itens.map(i => i.v)); return `<div class="r-hb">${itens.map(i => `<span class="hb-l">${esc(i.l)}</span><span class="hb-t"><i style="width:${i.v ? Math.max(3, i.v/max*100) : 0}%"></i></span><span class="hb-n">${fmt ? fmt(i) : i.v}</span>`).join("")}</div>`; };
 function resumoPdf(A, R){
   const dl = s => { const d = parse(s); return d.getDate()+" de "+MES_L[d.getMonth()]; }, q = A.cont.length, P = A.grupos.length, out = [];
   const mesmoMes = R.de.slice(0,7)===R.ate.slice(0,7) && R.de.slice(8)==="01" && addD(R.ate,1).slice(8)==="01";
@@ -1988,9 +2001,9 @@ function telaPdf(){
   if (q){
     h += `<h2>${tit}</h2>${colunasSvg(sr.itens)}
       <div class="r-two"><div><h2>Serviços</h2>${barrasPdf(Object.values(sv).sort((a,b) => b.v-a.v), i => i.v+(A.total ? " · "+reaisC(i.fat) : ""))}</div><div><h2>Dias da semana</h2>${barrasPdf(wdF)}</div></div>
-      <h2>Quem foi atendido</h2><table><thead><tr><th>Pessoa</th><th>Serviços</th><th class="v">Vezes</th><th class="v">Recebido</th></tr></thead><tbody>
-      ${A.grupos.map(x => `<tr><td><b>${esc(x.nome)}</b><div class="r-sub">${x.datas.map(dataCurta).join(", ")}</div></td><td>${Object.keys(x.sv).map(s => esc(s)+" × "+x.sv[s]).join("<br>")}</td><td class="v">${x.n}</td><td class="v">${reais(x.tot)}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td>Total</td><td></td><td class="v">${q}</td><td class="v">${reais(A.total)}</td></tr></tfoot></table>`;
+      <h2>Quem foi atendido</h2><table><thead><tr><th style="width:44%">Pessoa</th><th class="r-svc">Serviços</th><th class="v">Vezes</th><th class="v">Recebido</th></tr></thead><tbody>
+      ${A.grupos.map(x => `<tr><td><b>${esc(x.nome)}</b><div class="r-svm">${Object.keys(x.sv).map(s => esc(s)+"&nbsp;×&nbsp;"+x.sv[s]).join(" · ")}</div><div class="r-sub">${x.datas.map(dataCurta).join(", ")}</div></td><td class="r-svc">${Object.keys(x.sv).map(s => esc(s)+"&nbsp;×&nbsp;"+x.sv[s]).join("<br>")}</td><td class="v">${x.n}</td><td class="v">${reais(x.tot)}</td></tr>`).join("")}
+      <tr class="tot"><td>Total</td><td class="r-svc"></td><td class="v">${q}</td><td class="v">${reais(A.total)}</td></tr></tbody></table>`;
   }
   h += `<p class="r-foot">Gerado pelo Hora Marcada em ${dl(hoje())}. Contém dados de clientes: guarde e compartilhe com cuidado.</p></article></div>`;
   return h;
@@ -2045,6 +2058,7 @@ function telaAjustes(){
   h += `<section class="panel"><h3>Horário de atendimento</h3><div class="field"><span class="lbl">Dias da semana</span><div class="daypick">${[1,2,3,4,5,6,0].map(d => `<button type="button" aria-pressed="${a.dias.includes(d)}" onclick="PA.aj.dias=PA.aj.dias.includes(${d})?PA.aj.dias.filter(x=>x!==${d}):[...PA.aj.dias,${d}].sort();render()">${DIAS[d]}</button>`).join("")}</div></div>
     <div class="grid3"><div class="field"><label for="ajAbre">Abre às</label>${sel("ajAbre", a.abre, "PA.aj.abre", horas)}</div><div class="field"><label for="ajFecha">Fecha às</label>${sel("ajFecha", a.fecha, "PA.aj.fecha", horas)}</div>
       <div class="field"><label for="ajInt">Folga entre clientes</label>${sel("ajInt", a.intervalo+" min", "PA.aj.intervalo", ["0 min","5 min","10 min","15 min","20 min","30 min"]).replace('PA.aj.intervalo=this.value','PA.aj.intervalo=parseInt(this.value)')}</div></div>
+    <div class="field"><label for="ajPasso">Horários começam a cada</label>${sel("ajPasso", (a.passo||30)+" min", "PA.aj.passo", ["10 min","15 min","20 min","30 min","60 min"]).replace('PA.aj.passo=this.value','PA.aj.passo=parseInt(this.value)')}<p class="hint">Com 30 min, dá para marcar 13:00 ou 13:30. Com 60 min, só hora cheia. Para um horário fora da grade, use "Encaixe" ao marcar.</p></div>
     ${blocoHorarioDia(a)}
     <div class="swrow"><div><b>Intervalo de almoço</b><span>Some da página de agendamento.</span></div><label class="switch"><input type="checkbox" ${a.almoco.ativo ? "checked" : ""} onchange="PA.aj.almoco.ativo=this.checked;render()" aria-label="Intervalo de almoço"><span></span></label></div>
     ${a.almoco.ativo ? `<div class="two"><div class="field"><label for="ajAlI">Das</label>${sel("ajAlI", a.almoco.ini, "PA.aj.almoco.ini", horas)}</div><div class="field"><label for="ajAlF">Até</label>${sel("ajAlF", a.almoco.fim, "PA.aj.almoco.fim", horas)}</div></div>` : ""}
@@ -2056,7 +2070,8 @@ function telaAjustes(){
   h += `<section class="panel"><h3>Atendimento e avisos</h3>
     <div class="field"><label for="ajCanc">Cliente pode remarcar ou cancelar sozinho até</label>${sel("ajCanc", a.cancelarAteHoras+"h antes", "PA.aj.cancelarAteHoras", ["2h antes","6h antes","12h antes","24h antes","48h antes"]).replace('PA.aj.cancelarAteHoras=this.value','PA.aj.cancelarAteHoras=parseInt(this.value)')}<p class="hint">Depois disso, a página pede pra ele falar com você no WhatsApp.</p></div>
     <div class="swrow"><div><b>Lembrete automático por e-mail</b><span>Todo dia às 18h, quem informou e-mail recebe o lembrete do dia seguinte.</span></div><label class="switch"><input type="checkbox" ${a.lembreteEmail ? "checked" : ""} onchange="PA.aj.lembreteEmail=this.checked;render()" aria-label="Lembrete automático por e-mail"><span></span></label></div>
-    <div class="field"><label for="ajOnline">Link da sala de videochamada</label><input class="inp" id="ajOnline" value="${esc(a.linkOnline||"")}" placeholder="https://meet.google.com/..." oninput="PA.aj.linkOnline=this.value.trim();atualizarSavebar()"><p class="hint">Vai na confirmação e no lembrete dos serviços marcados como "por videochamada". Deixe vazio se preferir mandar o link pelo WhatsApp.</p></div>
+    <div class="swrow"><div><b>Atendo por videochamada</b><span>Ligue se algum serviço pode ser online. Desligado, as opções de videochamada somem do painel.</span></div><label class="switch"><input type="checkbox" ${a.atendeOnline !== false ? "checked" : ""} onchange="PA.aj.atendeOnline=this.checked;if(!this.checked){PA.aj.servicos.forEach(s=>s.online=false);PA.aj.linkOnline='';}render()" aria-label="Atendo por videochamada"><span></span></label></div>
+    ${a.atendeOnline !== false ? `<div class="field"><label for="ajOnline">Link da sala de videochamada</label><input class="inp" id="ajOnline" value="${esc(a.linkOnline||"")}" placeholder="https://meet.google.com/..." oninput="PA.aj.linkOnline=this.value.trim();atualizarSavebar()"><p class="hint">Vai na confirmação e no lembrete dos serviços marcados como "por videochamada". Deixe vazio se preferir mandar o link pelo WhatsApp.</p></div>` : ""}
     <div class="field"><label for="ajAval">Link de avaliação do Google</label><input class="inp" id="ajAval" value="${esc(a.linkAvaliacao||"")}" placeholder="https://g.page/r/.../review" oninput="PA.aj.linkAvaliacao=this.value.trim();atualizarSavebar()"><p class="hint">No Google Meu Negócio, toque em "Pedir avaliações" e copie o link. Depois de marcar "Compareceu", aparece o botão pra pedir a avaliação.</p></div></section>`;
   h += `<section class="panel"><h3>Sinal por Pix</h3><p>Ajuda a reduzir faltas. Depois de agendar, o cliente vê a chave Pix e manda o comprovante no WhatsApp.</p>
     <div class="field"><label for="ajSinal">Cobrar sinal de</label><select class="inp" id="ajSinal" onchange="PA.aj.sinalPara=this.value;render()">${[["ninguem","Ninguém"],["faltosos","Só de quem já faltou 2 vezes ou mais"],["todos","Todo mundo que agenda pela página"]].map(([v,l]) => `<option value="${v}" ${(a.sinalPara || "ninguem")===v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
@@ -2069,7 +2084,7 @@ function telaAjustes(){
       <div class="field"><label for="sD${i}">Minutos</label><input class="inp tnum" id="sD${i}" type="number" min="5" max="480" step="5" value="${s.duracao}" oninput="PA.aj.servicos[${i}].duracao=+this.value;atualizarSavebar()"></div>
       <div class="field"><label for="sP${i}">Preço (R$)</label><input class="inp tnum" id="sP${i}" type="number" min="0" step="1" value="${s.preco}" oninput="PA.aj.servicos[${i}].preco=+this.value;atualizarSavebar()"></div>
       <label class="switch" style="margin-bottom:10px"><input type="checkbox" ${s.ativo ? "checked" : ""} onchange="PA.aj.servicos[${i}].ativo=this.checked;render()" aria-label="Serviço ativo"><span></span></label>
-      <label class="check" style="grid-column:1 / -1"><input type="checkbox" ${s.online ? "checked" : ""} onchange="PA.aj.servicos[${i}].online=this.checked;render()"><span>Por videochamada</span></label></div>`).join("")}
+      ${a.atendeOnline !== false ? `<label class="check" style="grid-column:1 / -1"><input type="checkbox" ${s.online ? "checked" : ""} onchange="PA.aj.servicos[${i}].online=this.checked;render()"><span>Por videochamada</span></label>` : ""}</div>`).join("")}
     <button class="btn btn-sec" type="button" onclick="PA.aj.servicos.push({id:'s'+Date.now().toString(36),nome:'Novo serviço',duracao:60,preco:0,ativo:true,online:false});render();setTimeout(()=>{const e=document.getElementById('sN'+(PA.aj.servicos.length-1));e&&(e.focus(),e.select())},20)">${ic("plus")} Adicionar serviço</button></section>`;
   h += blocoInstalar();
   const adm = PA.d.conta && PA.d.conta.admin, dona = adm ? PA.d.conta.negocios.find(n => n.p===PA.d.perfil.p) : null;
