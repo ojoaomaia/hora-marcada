@@ -321,7 +321,7 @@ input[type=date].inp,input[type=time].inp{min-width:0}
 .prow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
 .prow .pn{display:block;font-weight:600;overflow-wrap:anywhere}
 .prow .ps{display:block;color:var(--muted);font-size:13.5px;margin-top:2px;overflow-wrap:anywhere}
-.prow .pv{text-align:right;white-space:nowrap;flex:none}
+.prow .pv{text-align:right;white-space:nowrap;flex:none;display:flex;flex-direction:column;align-items:flex-end}
 .prow .pv small{display:block;color:var(--muted);font-size:12.5px}
 .ptot{border-top:2px solid var(--line)}
 .ptot .pn,.ptot .pv b{font-size:16px}
@@ -597,7 +597,11 @@ const nomeDia = s => { if (s===hoje()) return "Hoje"; if (s===amanha()) return "
 const cap = s => s.charAt(0).toUpperCase()+s.slice(1);
 const ini = n => (n.split(/\s+/).filter(w => w.length > 2).slice(0,2).map(w => w[0]).join("") || n[0] || "?").toUpperCase();
 const dig = s => String(s||"").replace(/\D/g,"");
-const telF = t => { const d = dig(t).replace(/^55/,""); return d.length===11 ? `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}` : d.length===10 ? `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}` : t; };
+/* identificação do cliente: WhatsApp, ou "sem-nome" quando não há número (igual ao servidor) */
+const chaveCli = (tel, nome) => { const t = String(tel||""); if (/^sem-/.test(t)) return t; const d = dig(t); if (d.length >= 12 && !/^55?0+$/.test(d) && !/^\d{2}0{8,}$/.test(d.slice(2))) return d; const s = String(nome||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,60); return "sem-"+(s||"cliente"); };
+const temZap = t => !/^sem-/.test(String(t||"")) && dig(t).length >= 12;
+const kc = t => /^sem-/.test(String(t||"")) ? String(t) : dig(t);
+const telF = t => { if (/^sem-/.test(String(t||""))) return "Sem WhatsApp"; const d = dig(t).replace(/^55/,""); return d.length===11 ? `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}` : d.length===10 ? `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}` : t; };
 const zap = (tel, txt) => "https://wa.me/"+dig(tel)+(txt ? "?text="+encodeURIComponent(txt) : "");
 const prim = n => String(n).split(" ")[0];
 const durTxt = m => m >= 60 ? Math.floor(m/60)+"h"+(m%60 ? pad(m%60) : "") : m+" min";
@@ -656,7 +660,7 @@ const DEMO_NOMES = {
   psico:["Mariana Couto","Rafael Nunes","Juliana Prado","Carlos Menezes","Beatriz Lima","Thiago Ramos","Larissa Melo","Pedro Henrique Sá","Aline Castro"]
 };
 const DEMO_SERIES = { estetica:[["Bianca Rocha",5,"15:00","spa"]], psico:[["Mariana Couto",2,"18:00","online"],["Rafael Nunes",4,"09:00","presencial"],["Larissa Melo",1,"14:00","online"]] };
-const DBKEY = "hora-marcada-final-v9";
+const DBKEY = "hora-marcada-final-v10";
 const DEMO_BOT = "HoraMarcadaBot";
 let db = null, seq = 0;
 const nid = p => (p||"R")+Date.now().toString(36)+(seq++).toString(36);
@@ -748,6 +752,8 @@ function dbSeed(){
 }
 function seedExtras(){
   db.reservas.forEach(r => Object.assign(r, {codigo:codigoNovo(), aviso:"", lembreteEmail:false, avaliacao:false, sinal:"", sinalValor:0}));
+  /* pagamentos fictícios: quase tudo que passou de 4 dias está pago; os mais recentes ficam a receber */
+  db.reservas.forEach(r => { if (r.presenca==="veio" && r.data < addD(hoje(), -4) && hash(r.id)%7 !== 0){ r.pago = true; r.forma = (r.p==="psico" ? ["Pix","Pix","Plano de saúde","Dinheiro"] : ["Pix","Cartão de crédito","Pix","Cartão de débito","Dinheiro"])[hash(r.id+"f") % (r.p==="psico" ? 4 : 5)]; } });
   for (const p of Object.keys(PADRAO).filter(k => PADRAO[k].agendamentoOnline)){
     const fut = db.reservas.filter(r => r.p===p && r.status==="aprovado" && !r.serie && r.data > amanha()).sort((a,b) => (a.data+a.hora).localeCompare(b.data+b.hora));
     if (fut[0]){ fut[0].status = "cancelado"; fut[0].aviso = "Cancelado pela página hoje às 09:12"; }
@@ -778,12 +784,14 @@ function dadosPainel(p){
   const c = db.cfg[p], de = inicioJanela(), notas = {};
   if (c.lembreteEmail && agora().getHours() >= 18) db.reservas.forEach(r => { if (r.p===p && r.data===amanha() && ativa(r) && r.email) r.lembreteEmail = true; });
   Object.keys(db.notas).forEach(k => { if (k.startsWith(p+"|")) notas[k.slice(p.length+1)] = db.notas[k]; });
-  return {perfil:{p, nome:c.nome, login:c.login}, config:clone(c), reservas:db.reservas.filter(r => r.p===p && r.data>=de).map(r => ({...r})),
+  return {perfil:{p, nome:c.nome, login:c.login}, config:clone(c), reservas:db.reservas.filter(r => r.p===p && r.data>=de).map(r => ({...r, telefone:chaveCli(r.telefone, r.cliente)})),
     bloqueios:db.bloqueios.filter(b => b.p===p && b.data>=hoje()).map(b => ({...b})), notas,
     espera:(db.espera||[]).filter(e => e.p===p && (!e.data || e.data >= hoje())).map(e => ({...e})),
-    telegram:{disponivel:true, conectado:!!(db.telegram||{})[p], bot:DEMO_BOT}, seguranca:{senhaProvisoria: db.senhas[p]===DEMO_SENHA}};
+    telegram:{disponivel:true, conectado:!!(db.telegram||{})[p], bot:DEMO_BOT}, seguranca:{senhaProvisoria: db.senhas[p]===DEMO_SENHA},
+    seriesSemFim:Object.keys(db.semFim||{}).filter(k => db.semFim[k]===p), formasPagamento:FORMAS_DEMO};
 }
 const FECHADA = {ok:false, erro:"Os horários são marcados direto pelo WhatsApp."};
+const FORMAS_DEMO = ["Pix","Dinheiro","Cartão de débito","Cartão de crédito","Plano de saúde","Outro"];
 const DEMO_SRV = {
   config:({p}) => db.cfg[p] ? {ok:true, config:publica(db.cfg[p])} : {ok:false, erro:"Página de agendamento não encontrada. Confira o link."},
   livres({p, inicio, dias, duracao, codigo}){ if (!db.cfg[p].agendamentoOnline) return FECHADA; const ig = porCodigo(p, codigo); const l = livresDemo(p, inicio, Math.min(+dias||7, 14), +duracao||60, {ignorar: ig && ig.id}); return {ok:true, dias: db.cfg[p].reservada ? ocultar(l) : l}; },
@@ -869,11 +877,14 @@ const DEMO_SRV = {
   aprovarTodos(d, p){ let n = 0; (d.ids || []).forEach(id => { const r = mine(p, id); if (r && r.status==="pendente"){ r.status = "aprovado"; r.aviso = ""; n++; } }); return {...ok(p), n}; },
   recusar(d, p){ const r = mine(p, d.id); if (!r) return nao(); r.status = "recusado"; r.motivo = String(d.motivo||"").slice(0,300); return ok(p); },
   presenca(d, p){ const r = mine(p, d.id); if (!r) return nao(); r.presenca = d.valor||""; return ok(p); },
+  pagamento(d, p){ const r = mine(p, d.id); if (!r) return nao(); const f = FORMAS_DEMO.includes(d.forma) ? d.forma : ""; if (d.pago && !f) return {ok:false, erro:"Escolha a forma de pagamento."}; r.pago = !!d.pago; r.forma = d.pago ? f : ""; return ok(p); },
   lembrete(d, p){ const r = mine(p, d.id); if (!r) return nao(); r.lembrete = true; return ok(p); },
   serie(d, p){
     const r = mine(p, d.id); if (!r) return nao();
     const serie = r.serie || "S"+r.id, pul = []; let n = 0; r.serie = serie;
-    for (let k=1;k<=Math.min(+d.semanas||4, 26);k++){
+    const semFim = +d.semanas === -1, N = semFim ? Math.ceil((parse(addD(hoje(), 84)) - parse(r.data)) / (7*864e5)) : Math.min(+d.semanas||4, 26);
+    if (semFim){ db.semFim = db.semFim || {}; db.semFim[serie] = p; }
+    for (let k=1;k<=N;k++){
       const data = addD(r.data, 7*k);
       if (db.reservas.some(x => x.serie===serie && x.data===data && ativa(x))) continue;
       if (!db.cfg[p].dias.includes(parse(data).getDay()) || feriadoDe(db.cfg[p], data) || !cabe(p, data, toMin(r.hora), r.duracao)){ pul.push(data); continue; }
@@ -882,7 +893,7 @@ const DEMO_SRV = {
     return {...ok(p), criadas:n, puladas:pul};
   },
   pararSerie(d, p){
-    const r = mine(p, d.id); if (!r || !r.serie) return nao(); const serie = r.serie, antes = db.reservas.length;
+    const r = mine(p, d.id); if (!r || !r.serie) return nao(); const serie = r.serie, antes = db.reservas.length; if (db.semFim) delete db.semFim[serie];
     db.reservas = db.reservas.filter(x => !(x.serie===serie && x.data > r.data && !x.presenca));
     db.reservas.forEach(x => { if (x.serie===serie && x.data >= r.data) x.serie = ""; });
     return {...ok(p), removidas:antes-db.reservas.length};
@@ -891,9 +902,9 @@ const DEMO_SRV = {
     const ok = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s||""));
     if (!ok(d.de) || !ok(d.ate) || d.de > d.ate) return {ok:false, erro:"Escolha um período válido."};
     if (parse(d.ate) - parse(d.de) > 400*864e5) return {ok:false, erro:"Escolha um período de até 13 meses."};
-    return {ok:true, reservas:db.reservas.filter(r => r.p===p && r.data>=d.de && r.data<=d.ate).map(r => ({data:r.data, hora:r.hora, duracao:r.duracao, servico:r.servico, preco:r.preco, cliente:r.cliente, telefone:r.telefone, status:r.status, presenca:r.presenca}))};
+    return {ok:true, reservas:db.reservas.filter(r => r.p===p && r.data>=d.de && r.data<=d.ate).map(r => ({data:r.data, hora:r.hora, duracao:r.duracao, servico:r.servico, preco:r.preco, cliente:r.cliente, telefone:r.telefone, status:r.status, presenca:r.presenca, pago:!!r.pago, forma:r.forma||""})).map(r => ({...r, telefone:chaveCli(r.telefone, r.cliente)}))};
   },
-  nota(d, p){ const k = p+"|"+dig(d.telefone), t = String(d.texto||"").trim().slice(0,500); if (t) db.notas[k] = t; else delete db.notas[k]; return ok(p); },
+  nota(d, p){ const k = p+"|"+kc(d.telefone), t = String(d.texto||"").trim().slice(0,500); if (t) db.notas[k] = t; else delete db.notas[k]; return ok(p); },
   bloquear(d, p){
     if (!d.inteiro && toMin(d.fim) <= toMin(d.ini)) return {ok:false, erro:"O fim precisa ser depois do início."};
     db.bloqueios.push({id:nid("B"), p, data:d.data, inteiro:!!d.inteiro, ini:d.ini||"", fim:d.fim||"", motivo:String(d.motivo||"").slice(0,120)}); return ok(p);
@@ -907,7 +918,7 @@ const DEMO_SRV = {
     const c = db.cfg[p], s = c.servicos.find(x => x.id===d.servico && x.ativo), nome = String(d.nome||"").trim().replace(/\s+/g," "), tel = dig(d.telefone), email = String(d.email||"").trim().toLowerCase();
     if (!s) return {ok:false, erro:"Escolha o serviço."};
     if (nome.length < 3) return {ok:false, erro:"Escreva o nome do cliente."};
-    if (tel.length < 12 || tel.length > 13) return {ok:false, erro:"Confira o WhatsApp do cliente com DDD."};
+    if (tel && (tel.length < 12 || tel.length > 13)) return {ok:false, erro:"Confira o WhatsApp do cliente com DDD, ou deixe em branco."};
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return {ok:false, erro:"Confira o e-mail, ou deixe em branco."};
     const v = vagaDona(p, d.data, d.hora, s.duracao, null, d.encaixe); if (v) return v;
     const r = {id:nid(), p, data:d.data, hora:d.hora, duracao:s.duracao, servico:s.nome, preco:s.preco, cliente:nome, telefone:tel, email, status:"aprovado", presenca:"", lembrete:false, motivo:"", serie:"", origem:"painel", codigo:codigoNovo(), aviso:"", lembreteEmail:false, avaliacao:false};
@@ -924,11 +935,12 @@ const DEMO_SRV = {
   sinal(d, p){ const r = mine(p, d.id); if (!r) return nao(); r.sinal = ["pago","pendente",""].includes(d.valor) ? d.valor : ""; return ok(p); },
   esperaRemover(d, p){ db.espera = db.espera.filter(e => !(e.id===d.id && e.p===p)); return ok(p); },
   editarCliente(d, p){
-    const velho = dig(d.telefone), novo = dig(d.novoTelefone), nome = String(d.nome||"").trim().replace(/\s+/g," "), email = String(d.email||"").trim().toLowerCase();
+    const velho = kc(d.telefone), novoDig = dig(d.novoTelefone), nome = String(d.nome||"").trim().replace(/\s+/g," "), email = String(d.email||"").trim().toLowerCase();
     if (nome.length < 3) return {ok:false, erro:"Escreva o nome do cliente."};
-    if (novo.length < 12 || novo.length > 13) return {ok:false, erro:"Confira o WhatsApp com DDD."};
+    if (novoDig && (novoDig.length < 12 || novoDig.length > 13)) return {ok:false, erro:"Confira o WhatsApp com DDD, ou deixe em branco."};
+    const novo = novoDig || chaveCli("", nome);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return {ok:false, erro:"Confira o e-mail, ou deixe em branco."};
-    let n = 0; db.reservas.forEach(r => { if (r.p===p && dig(r.telefone)===velho){ Object.assign(r, {cliente:nome, telefone:novo, email}); n++; } });
+    let n = 0; db.reservas.forEach(r => { if (r.p===p && chaveCli(r.telefone, r.cliente)===velho){ Object.assign(r, {cliente:nome, telefone:novoDig, email}); n++; } });
     if (!n) return {ok:false, erro:"Cliente não encontrado."};
     const k = p+"|"+velho; if (db.notas[k] && velho!==novo){ db.notas[p+"|"+novo] = db.notas[k]; delete db.notas[k]; }
     return {...ok(p), n};
@@ -1343,7 +1355,7 @@ function renderFeito(app, head){
 
 /* ======================== PAINEL DA DONA ======================== */
 const novoPA = () => ({token:"", d:null, carregando:false, aba:"inicio", diaVer:null, semAg:0, diaAg:hoje(), sel:null, abrir:null, motivo:"", msgs:{}, repetir:null, nota:null, notaTxt:"",
-  bloq:false, bf:{inteiro:false, ini:"08:00", fim:"09:00", motivo:""}, busca:"", cli:null, aj:null, sj:{atual:"", nova:"", conf:""}, login:{email:"", senha:"", ver:false, manter:true, erro:"", esqueci:false, enviando:false}, flash:null, verRec:false, novo:null, mover:null, avisos:{}, mes:0, rel:{de:"", ate:"", lista:null, erro:"", carregando:false, semMarca:false, n:0}, confTodos:false, editCli:null, tg:null});
+  bloq:false, bf:{inteiro:false, ini:"08:00", fim:"09:00", motivo:""}, busca:"", cli:null, aj:null, sj:{atual:"", nova:"", conf:""}, login:{email:"", senha:"", ver:false, manter:true, erro:"", esqueci:false, enviando:false}, flash:null, verRec:false, novo:null, mover:null, avisos:{}, mes:0, pag:null, rel:{de:"", ate:"", lista:null, erro:"", carregando:false, semMarca:false, n:0}, confTodos:false, editCli:null, tg:null});
 let PA = novoPA();
 async function bootPainel(){
   if (PA.d){ render(); return; }
@@ -1402,7 +1414,7 @@ async function acao(nome, dados, msg){
 function irSenha(){ irAba("ajustes"); setTimeout(() => { const e = document.getElementById("sjA"); if (e){ e.scrollIntoView({block:"center"}); e.focus(); } }, 60); }
 function irAba(a){ PA.aba = a; PA.confTodos = false; PA.abrir = PA.repetir = PA.nota = PA.sel = null; PA.bloq = false; if (a==="ajustes" && !PA.aj) PA.aj = clone(PA.d.config); render(); scrollTo(0,0); }
 const PC = () => PA.d.config;
-const notaDe = tel => PA.d.notas[dig(tel)] || "";
+const notaDe = tel => PA.d.notas[kc(tel)] || "";
 const R = id => PA.d.reservas.find(r => r.id===id);
 function histDe(tel){ const l = PA.d.reservas.filter(r => r.telefone===tel && r.presenca); return {veio:l.filter(r => r.presenca==="veio").length, faltou:l.filter(r => r.presenca==="faltou").length}; }
 const refAt = r => PC().discreto ? "da sua sessão" : "do seu horário de "+r.servico;
@@ -1439,9 +1451,16 @@ async function recusar(id){
 const presenca = (id, v) => acao("presenca", {id, valor:v}, () => { const r = R(id), h = histDe(r.telefone); return v==="faltou" ? (h.faltou>=2 ? `${prim(r.cliente)} já faltou ${h.faltou} vezes. Fica marcado na aba Clientes.` : "Falta registrada.") : v ? "Presença registrada." : "Desfeito."; });
 function lembrar(id){ setTimeout(() => acao("lembrete", {id}), 0); }
 function abrirRepetir(id){ PA.repetir = PA.repetir===id ? null : id; PA.abrir = PA.nota = null; render(); }
-const repetir = (id, n) => { PA.repetir = null; return acao("serie", {id, semanas:n}, r => { const x = R(id); return `${r.criadas} ${r.criadas===1?"horário reservado":"horários reservados"} toda ${semFeira(DIAS_L[parse(x.data).getDay()])} às ${x.hora}.`+(r.puladas.length ? ` Pulei ${r.puladas.map(dataCurta).join(", ")} porque já estava ocupado.` : ""); }); };
+const repetir = (id, n) => { PA.repetir = null; return acao("serie", {id, semanas:n}, r => { const x = R(id); return (n===-1 ? `Pronto: toda ${semFeira(DIAS_L[parse(x.data).getDay()])} às ${x.hora}, sem data para acabar. As próximas 12 semanas já estão reservadas e o sistema vai reservando as seguintes sozinho.` : `${r.criadas} ${r.criadas===1?"horário reservado":"horários reservados"} toda ${semFeira(DIAS_L[parse(x.data).getDay()])} às ${x.hora}.`)+(r.puladas.length ? ` Pulei ${r.puladas.map(dataCurta).join(", ")} porque já estava ocupado.` : ""); }); };
+const semFim = r => !!(r && r.serie && (PA.d.seriesSemFim || []).includes(r.serie));
+/* pagamento */
+const FORMAS = () => PA.d.formasPagamento || ["Pix","Dinheiro","Cartão de débito","Cartão de crédito","Plano de saúde","Outro"];
+const pagar = (id, forma) => { PA.pag = null; return acao("pagamento", {id, pago:true, forma}, `Pagamento registrado: ${forma}.`); };
+const despagar = id => { PA.pag = null; return acao("pagamento", {id, pago:false}, "Pagamento desfeito. Voltou para a receber."); };
+function abrirPag(id){ PA.pag = PA.pag===id ? null : id; PA.abrir = PA.repetir = PA.nota = null; render(); }
+const pagBtn = r => r.pago ? `<button class="btn btn-ghost btn-sm" type="button" onclick="despagar('${r.id}')">Desfazer pagamento</button>` : `<button class="btn ${r.presenca==="veio" ? "btn-pri" : "btn-soft"} btn-sm" type="button" onclick="abrirPag('${r.id}')">${ic("coin")} Registrar pagamento</button>`;
 const pararSerie = id => { PA.repetir = null; return acao("pararSerie", {id}, r => `Repetição encerrada. ${r.removidas} ${r.removidas===1?"horário futuro liberado":"horários futuros liberados"}.`); };
-function abrirNota(tel, onde){ const k = dig(tel)+"@"+onde; PA.nota = PA.nota===k ? null : k; PA.notaTxt = notaDe(tel); PA.abrir = PA.repetir = null; render();
+function abrirNota(tel, onde){ const k = kc(tel)+"@"+onde; PA.nota = PA.nota===k ? null : k; PA.notaTxt = notaDe(tel); PA.abrir = PA.repetir = null; render();
   if (PA.nota) setTimeout(() => { const el = document.getElementById("nota"); if (el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 20); }
 const salvarNota = (tel, apagar) => { const t = apagar ? "" : PA.notaTxt.trim(); PA.nota = null; return acao("nota", {telefone:tel, texto:t}, t ? "Observação salva." : "Observação apagada."); };
 async function bloquear(){
@@ -1460,10 +1479,10 @@ function editarCli(x){ PA.editCli = {tel:x.tel, nome:x.nome, novo:mascara(dig(x.
 async function salvarCliente(){
   const e = PA.editCli, tel = dig(e.novo);
   if (e.nome.trim().length < 3){ e.erro = "Escreva o nome do cliente."; atualizarLista(); return; }
-  if (tel.length < 10){ e.erro = "Confira o WhatsApp com DDD."; atualizarLista(); return; }
+  if (tel && tel.length < 10){ e.erro = "Confira o WhatsApp com DDD, ou deixe em branco."; atualizarLista(); return; }
   if (e.email.trim() && !emailOk(e.email.trim())){ e.erro = "Confira o e-mail, ou deixe em branco."; atualizarLista(); return; }
-  const r = await acao("editarCliente", {telefone:e.tel, nome:e.nome.trim(), novoTelefone:"55"+tel, email:e.email.trim()}, x => `Dados atualizados em ${x.n} ${x.n===1 ? "horário" : "horários"}.`);
-  if (r){ PA.cli = "55"+tel; PA.editCli = null; render(); }
+  const r = await acao("editarCliente", {telefone:e.tel, nome:e.nome.trim(), novoTelefone:tel ? "55"+tel : "", email:e.email.trim()}, x => `Dados atualizados em ${x.n} ${x.n===1 ? "horário" : "horários"}.`);
+  if (r){ PA.cli = tel ? "55"+tel : chaveCli("", e.nome.trim()); PA.editCli = null; render(); }
 }
 function msgEspera(e){ return `Olá, ${prim(e.nome)}! Aqui é do ${PC().nome}. Abriu um horário ${e.data ? "para "+diaMsg(e.data) : "nos próximos dias"}${e.periodo==="manha" ? " de manhã" : e.periodo==="tarde" ? " à tarde" : ""}. Ainda tem interesse? Me responde por aqui que eu já marco pra você.`; }
 function blocoListaEspera(){
@@ -1515,7 +1534,7 @@ function clientesConhecidos(){
   return Object.values(m).sort((a,b) => a.nome.localeCompare(b.nome));
 }
 /* último atendimento da pessoa: serviço e hora de sempre */
-function ultimoDe(tel){ return PA.d.reservas.filter(r => dig(r.telefone)===dig(tel) && (ativa(r) || r.presenca)).sort((a,b) => (b.data+b.hora).localeCompare(a.data+a.hora))[0]; }
+function ultimoDe(tel){ return PA.d.reservas.filter(r => kc(r.telefone)===kc(tel) && (ativa(r) || r.presenca)).sort((a,b) => (b.data+b.hora).localeCompare(a.data+a.hora))[0]; }
 function abrirNovo(data, cli, extra){
   extra = extra || {};
   const sv = servAtivos(), porNome = extra.servicoNome ? sv.find(x => x.nome===extra.servicoNome) : null;
@@ -1559,20 +1578,20 @@ async function salvarNovo(){
   const n = PA.novo, tel = dig(n.tel), hora = n.encaixe ? n.livre : n.hora;
   n.erro = "";
   if (n.nome.trim().length < 3) n.erro = "Escreva o nome do cliente.";
-  else if (tel.length < 10) n.erro = "Confira o WhatsApp do cliente com DDD.";
+  else if (tel && tel.length < 10) n.erro = "Confira o WhatsApp com DDD, ou deixe em branco.";
   else if (n.email.trim() && !emailOk(n.email.trim())) n.erro = "Confira o e-mail, ou deixe em branco.";
   else if (!hora) n.erro = "Escolha um horário.";
   if (n.erro){ render(); return; }
-  const r = await acao("criar", {nome:n.nome.trim(), telefone:"55"+tel, email:n.email.trim(), servico:n.servico, data:n.data, hora, encaixe:n.encaixe});
+  const r = await acao("criar", {nome:n.nome.trim(), telefone:tel ? "55"+tel : "", email:n.email.trim(), servico:n.servico, data:n.data, hora, encaixe:n.encaixe});
   if (!r) return;
   let extra = "";
   if (n.semanas){
     const s2 = await api("serie", {token:PA.token, id:r.id, semanas:n.semanas});
-    if (s2.ok){ PA.d = s2.dados; extra = ` Reservei toda ${semFeira(DIAS_L[parse(n.data).getDay()])} às ${hora} pelas próximas ${n.semanas} semanas`+(s2.puladas.length ? `, menos ${s2.puladas.map(dataCurta).join(", ")}, que já estava ocupado.` : "."); }
+    if (s2.ok){ PA.d = s2.dados; extra = ` Reservei toda ${semFeira(DIAS_L[parse(n.data).getDay()])} às ${hora} `+(n.semanas===-1 ? "sem data para acabar" : `pelas próximas ${n.semanas} semanas`)+(s2.puladas.length ? `, menos ${s2.puladas.map(dataCurta).join(", ")}, que já estava ocupado.` : "."); }
   }
   if (n.espera){ const s3 = await api("esperaRemover", {token:PA.token, id:n.espera}); if (s3.ok) PA.d = s3.dados; }
   const x = R(r.id);
-  PA.avisos[r.id] = {titulo:"Mande a confirmação pro cliente", texto:msgConfirmacao(x)+(n.semanas ? `\n\nDeixei reservado toda ${semFeira(DIAS_L[parse(x.data).getDay()])} às ${x.hora} pelas próximas ${n.semanas} semanas.` : "")};
+  PA.avisos[r.id] = {titulo:"Mande a confirmação pro cliente", texto:msgConfirmacao(x)+(n.semanas ? `\n\nDeixei reservado toda ${semFeira(DIAS_L[parse(x.data).getDay()])} às ${x.hora}`+(n.semanas===-1 ? ", como horário fixo." : ` pelas próximas ${n.semanas} semanas.`) : "")};
   PA.novo = null; mostrarCard(r.id, x.data);
   toast("Horário marcado."+extra+(x.email && !DEMO ? " A confirmação também foi por e-mail." : ""));
 }
@@ -1616,11 +1635,11 @@ function formNovo(){
     <p class="hint" style="margin-top:-6px">Entra já confirmado na sua agenda. Se a pessoa já for cliente, digite o nome e escolha na lista.</p>
     <div class="field"><label for="nvNome">Cliente</label><input class="inp" id="nvNome" list="dlCli" autocomplete="off" value="${esc(n.nome)}" placeholder="Digite o nome. Se já for cliente, aparece na lista" oninput="PA.novo.nome=this.value" onchange="escolherCliente(this.value)">
       <datalist id="dlCli">${clientesConhecidos().map(c => `<option value="${esc(c.nome)}"></option>`).join("")}</datalist></div>
-    <div class="two"><div class="field"><label for="nvTel">WhatsApp</label><input class="inp" id="nvTel" type="tel" inputmode="numeric" value="${esc(n.tel)}" placeholder="(16) 99999-9999" oninput="this.value=mascara(this.value);PA.novo.tel=this.value"></div>
+    <div class="two"><div class="field"><label for="nvTel">WhatsApp <span class="opt">(opcional)</span></label><input class="inp" id="nvTel" type="tel" inputmode="numeric" value="${esc(n.tel)}" placeholder="(16) 99999-9999" oninput="this.value=mascara(this.value);PA.novo.tel=this.value"></div>
       <div class="field"><label for="nvEmail">E-mail <span class="opt">(opcional)</span></label><input class="inp" id="nvEmail" type="email" value="${esc(n.email)}" placeholder="cliente@email.com" oninput="PA.novo.email=this.value"></div></div>
     <div class="field"><label for="nvServ">Serviço</label><select class="inp" id="nvServ" onchange="PA.novo.servico=this.value;carregarHorasNovo()">${sv.map(x => `<option value="${x.id}" ${x.id===n.servico ? "selected" : ""}>${esc(x.nome)} · ${x.duracao} min · ${reais(x.preco)}</option>`).join("")}</select></div>
     ${formHorario(n, "nv")}
-    <div class="field"><label for="nvRep">Repetir</label><select class="inp" id="nvRep" onchange="PA.novo.semanas=+this.value">${[[0,"Não repetir"],[4,"Toda semana, por 4 semanas"],[8,"Toda semana, por 8 semanas"],[12,"Toda semana, por 12 semanas"],[26,"Toda semana, por 6 meses"]].map(([v,l]) => `<option value="${v}" ${n.semanas===v ? "selected" : ""}>${l}</option>`).join("")}</select>
+    <div class="field"><label for="nvRep">Repetir</label><select class="inp" id="nvRep" onchange="PA.novo.semanas=+this.value">${[[0,"Não repetir"],[-1,"Toda semana, sem data para acabar"],[4,"Toda semana, por 4 semanas"],[8,"Toda semana, por 8 semanas"],[12,"Toda semana, por 12 semanas"],[26,"Toda semana, por 6 meses"]].map(([v,l]) => `<option value="${v}" ${n.semanas===v ? "selected" : ""}>${l}</option>`).join("")}</select>
       <p class="hint">Para quem vem sempre no mesmo dia e hora. Semanas já ocupadas são puladas.</p></div>
     ${n.espera ? `<p class="hint">Ao marcar, a pessoa sai da lista de espera.</p>` : ""}
     ${n.erro ? `<p class="err" role="alert">${esc(n.erro)}</p>` : ""}
@@ -1635,7 +1654,7 @@ async function copiarTexto(txt, campoId){
 /* ---------- componentes ---------- */
 function notaBtn(tel, onde){ return `<button class="btn btn-soft btn-sm" type="button" onclick="abrirNota('${tel}','${onde}')">${ic("note")} ${notaDe(tel) ? "Editar observação" : "Observação"}</button>`; }
 function notaBox(tel, nome, onde){
-  if (PA.nota===dig(tel)+"@"+onde) return `<div class="drawer"><label class="lbl" for="nota">Observação sobre ${esc(prim(nome))}</label>
+  if (PA.nota===kc(tel)+"@"+onde) return `<div class="drawer"><label class="lbl" for="nota">Observação sobre ${esc(prim(nome))}</label>
     <textarea class="inp" id="nota" maxlength="500" oninput="PA.notaTxt=this.value" placeholder="Alergia, preferência, forma de pagamento, algo para lembrar no próximo atendimento.">${esc(PA.notaTxt)}</textarea>
     <p class="hint">Só você vê. Aparece em todos os horários dessa pessoa.</p>
     <div class="row"><button class="btn btn-pri btn-sm grow" type="button" onclick="salvarNota('${tel}')">Salvar observação</button>${notaDe(tel) ? `<button class="btn btn-sec btn-sm" type="button" onclick="salvarNota('${tel}',true)">Apagar</button>` : ""}<button class="btn btn-ghost btn-sm" type="button" onclick="PA.nota=null;render()">Cancelar</button></div></div>`;
@@ -1652,34 +1671,37 @@ function cartao(r, onde){
   else if (passou) ch.push('<span class="chip c-warn">Veio ou faltou?</span>');
   else ch.push('<span class="chip c-ok">Confirmado</span>');
   if (r.aviso && r.status==="pendente") ch.push(`<span class="chip c-info">${esc(r.aviso)}</span>`);
-  if (r.serie && ativa(r)) ch.push(`<span class="chip c-info">Toda ${semFeira(DIAS_L[parse(r.data).getDay()])}</span>`);
+  if (r.serie && ativa(r)) ch.push(`<span class="chip c-info">Toda ${semFeira(DIAS_L[parse(r.data).getDay()])}${semFim(r) ? ", sem fim" : ""}</span>`);
   if (linkSessao(r) && ativa(r)) ch.push('<span class="chip c-mute">Online</span>');
   if (ativa(r) && !passou && r.lembrete) ch.push('<span class="chip c-mute">✓ Lembrete no WhatsApp</span>');
   if (ativa(r) && !passou && r.lembreteEmail) ch.push('<span class="chip c-mute">✓ Lembrete por e-mail</span>');
   if (r.avaliacao) ch.push('<span class="chip c-mute">✓ Avaliação pedida</span>');
   if (r.sinal==="pendente" && ativa(r)) ch.push(`<span class="chip c-warn">Sinal de ${reais(r.sinalValor)} pendente</span>`);
   if (r.sinal==="pago") ch.push(`<span class="chip c-ok">✓ Sinal de ${reais(r.sinalValor)} pago</span>`);
+  if (r.pago) ch.push(`<span class="chip c-ok">✓ Pago${r.forma ? " · "+esc(r.forma) : ""}</span>`);
+  else if (r.presenca==="veio" && r.preco > 0) ch.push(`<span class="chip c-warn">A receber ${reais(r.preco)}</span>`);
   if (h.faltou >= 2 && r.presenca!=="faltou" && ativa(r)) ch.push(`<span class="chip c-bad">Já faltou ${h.faltou}x</span>`);
-  const wa = `<a class="btn btn-soft btn-sm" href="${zap(r.telefone, "Olá, "+prim(r.cliente)+"!")}" target="_blank" rel="noopener">${ic("chat")} WhatsApp</a>`;
+  const zp = temZap(r.telefone);
+  const wa = zp ? `<a class="btn btn-soft btn-sm" href="${zap(r.telefone, "Olá, "+prim(r.cliente)+"!")}" target="_blank" rel="noopener">${ic("chat")} WhatsApp</a>` : "";
   const mover = `<button class="btn btn-soft btn-sm" type="button" onclick="abrirMover('${r.id}')">${ic("move")} Mudar horário</button>`;
   let a = "";
   if (r.status==="pendente") a = `<div class="acts"><button class="btn btn-pri btn-sm grow" type="button" onclick="aprovar('${r.id}')">${ic("check")} Aprovar</button><button class="btn btn-sec btn-sm grow" type="button" onclick="abrirMotivo('${r.id}')">Recusar</button>${mover}${wa}${notaBtn(r.telefone, onde+r.id)}</div>`;
   else if (r.status==="aprovado" && passou) a = r.presenca
-      ? `<div class="acts">${r.presenca==="veio" && c.linkAvaliacao && !r.avaliacao ? `<a class="btn btn-pri btn-sm grow" href="${zap(r.telefone, msgAvaliacao(r))}" target="_blank" rel="noopener" onclick="pedirAvaliacao('${r.id}')">${ic("star")} Pedir avaliação no Google</a>` : ""}${wa}${notaBtn(r.telefone, onde+r.id)}<button class="btn btn-ghost btn-sm" type="button" onclick="presenca('${r.id}','')">Desfazer</button></div>`
+      ? `<div class="acts">${zp && r.presenca==="veio" && c.linkAvaliacao && !r.avaliacao ? `<a class="btn btn-pri btn-sm grow" href="${zap(r.telefone, msgAvaliacao(r))}" target="_blank" rel="noopener" onclick="pedirAvaliacao('${r.id}')">${ic("star")} Pedir avaliação no Google</a>` : ""}${r.presenca==="veio" ? pagBtn(r) : ""}${wa}${notaBtn(r.telefone, onde+r.id)}<button class="btn btn-ghost btn-sm" type="button" onclick="presenca('${r.id}','')">Desfazer presença</button></div>`
       : `<div class="acts"><button class="btn btn-ok btn-sm grow" type="button" onclick="presenca('${r.id}','veio')">${ic("check")} Compareceu</button><button class="btn btn-sec btn-sm grow" type="button" onclick="presenca('${r.id}','faltou')">Faltou</button>${notaBtn(r.telefone, onde+r.id)}</div>`;
-  else if (r.status==="aprovado") a = `<div class="acts"><a class="btn ${r.lembrete ? "btn-sec" : "btn-pri"} btn-sm grow" href="${zap(r.telefone, msgLembrete(r))}" target="_blank" rel="noopener" onclick="lembrar('${r.id}')">${ic("bell")} ${r.lembrete ? "Lembrar de novo" : "Enviar lembrete"}</a>
+  else if (r.status==="aprovado") a = `<div class="acts">${zp ? `<a class="btn ${r.lembrete ? "btn-sec" : "btn-pri"} btn-sm grow" href="${zap(r.telefone, msgLembrete(r))}" target="_blank" rel="noopener" onclick="lembrar('${r.id}')">${ic("bell")} ${r.lembrete ? "Lembrar de novo" : "Enviar lembrete"}</a>` : ""}
       ${wa}${mover}${notaBtn(r.telefone, onde+r.id)}<button class="btn btn-soft btn-sm" type="button" onclick="abrirRepetir('${r.id}')">${ic("repeat")} ${r.serie ? "Repetição" : "Repetir toda semana"}</button>
-      <button class="btn btn-ghost btn-sm" type="button" onclick="abrirMotivo('${r.id}')">Desmarcar</button></div>`;
+      ${pagBtn(r)}<button class="btn btn-ghost btn-sm" type="button" onclick="abrirMotivo('${r.id}')">Desmarcar</button></div>`;
   else if (r.status==="cancelado") a = `<div class="drawer"><p class="hint" style="color:var(--ink-2)">${esc(prim(r.cliente))} cancelou pela página${r.aviso ? " ("+esc(r.aviso.replace(/^Cancelado pela página /,""))+")" : ""}. O horário já voltou a ficar livre.</p>
       <div class="row">${wa}${r.aviso ? `<button class="btn btn-sec btn-sm" type="button" onclick="lido('${r.id}')">Ok, entendi</button>` : ""}</div></div>`;
   else { const txt = PA.msgs[r.id] || msgRecusa(r);
     a = `<div class="drawer" id="rec-${r.id}"><label class="lbl" for="msg-${r.id}">Mensagem para ${esc(prim(r.cliente))}</label><textarea class="inp" id="msg-${r.id}" oninput="PA.msgs['${r.id}']=this.value">${esc(txt)}</textarea>
-      <div class="row"><a class="btn btn-pri btn-sm grow" href="${zap(r.telefone, txt)}" target="_blank" rel="noopener" onclick="this.href=zap('${r.telefone}',document.getElementById('msg-${r.id}').value)">${ic("chat")} Enviar no WhatsApp</a><button class="btn btn-sec btn-sm" type="button" onclick="copiarTexto(document.getElementById('msg-${r.id}').value,'msg-${r.id}')">${ic("copy")} Copiar</button></div>
-      <p class="hint">WhatsApp do cliente: <span class="tnum">${telF(r.telefone)}</span>${r.email ? `. O aviso de recusa também ${DEMO ? "iria" : "foi"} automático para <b>${esc(r.email)}</b>.` : ""}</p></div>`; }
+      <div class="row">${zp ? `<a class="btn btn-pri btn-sm grow" href="${zap(r.telefone, txt)}" target="_blank" rel="noopener" onclick="this.href=zap('${r.telefone}',document.getElementById('msg-${r.id}').value)">${ic("chat")} Enviar no WhatsApp</a>` : ""}<button class="btn btn-sec btn-sm" type="button" onclick="copiarTexto(document.getElementById('msg-${r.id}').value,'msg-${r.id}')">${ic("copy")} Copiar</button></div>
+      <p class="hint">${zp ? `WhatsApp do cliente: <span class="tnum">${telF(r.telefone)}</span>` : "Sem WhatsApp cadastrado: copie a mensagem e mande por onde preferir"}${r.email ? `. O aviso de recusa também ${DEMO ? "iria" : "foi"} automático para <b>${esc(r.email)}</b>.` : ""}</p></div>`; }
   if (r.sinal==="pendente" && ativa(r) && !passou) a = `<div class="acts"><button class="btn btn-soft btn-sm" type="button" onclick="marcarSinal('${r.id}')">${ic("coin")} Sinal recebido</button><span class="hint" style="align-self:center">Confira o Pix antes de marcar.</span></div>` + a;
   const av = PA.avisos[r.id];
   if (av && ativa(r)) a = `<div class="drawer notice"><label class="lbl" for="av-${r.id}">${esc(av.titulo)}</label><textarea class="inp" id="av-${r.id}" oninput="PA.avisos['${r.id}'].texto=this.value">${esc(av.texto)}</textarea>
-      <div class="row"><a class="btn btn-pri btn-sm grow" href="${zap(r.telefone, av.texto)}" target="_blank" rel="noopener" onclick="this.href=zap('${r.telefone}',document.getElementById('av-${r.id}').value);setTimeout(()=>{delete PA.avisos['${r.id}'];render()},300)">${ic("chat")} Enviar no WhatsApp</a><button class="btn btn-sec btn-sm" type="button" onclick="copiarTexto(document.getElementById('av-${r.id}').value,'av-${r.id}')">${ic("copy")} Copiar</button><button class="btn btn-ghost btn-sm" type="button" onclick="delete PA.avisos['${r.id}'];render()">Agora não</button></div>
+      <div class="row">${zp ? `<a class="btn btn-pri btn-sm grow" href="${zap(r.telefone, av.texto)}" target="_blank" rel="noopener" onclick="this.href=zap('${r.telefone}',document.getElementById('av-${r.id}').value);setTimeout(()=>{delete PA.avisos['${r.id}'];render()},300)">${ic("chat")} Enviar no WhatsApp</a>` : ""}<button class="btn btn-sec btn-sm" type="button" onclick="copiarTexto(document.getElementById('av-${r.id}').value,'av-${r.id}')">${ic("copy")} Copiar</button><button class="btn btn-ghost btn-sm" type="button" onclick="delete PA.avisos['${r.id}'];render()">Agora não</button></div>
       ${r.email ? `<p class="hint">${DEMO ? "Na versão real, o cliente também recebe isso por e-mail" : "O cliente também recebeu por e-mail"} (${esc(r.email)}).</p>` : ""}</div>` + a;
   if (PA.mover && PA.mover.id===r.id) a += `<div class="drawer"><span class="lbl">Novo horário para ${esc(prim(r.cliente))}</span>${formHorario(PA.mover, "mv")}
       <div class="row"><button class="btn btn-pri btn-sm grow" type="button" onclick="confirmarMover()">${ic("check")} Mudar horário</button><button class="btn btn-ghost btn-sm" type="button" onclick="PA.mover=null;render()">Cancelar</button></div>
@@ -1687,10 +1709,13 @@ function cartao(r, onde){
   if (PA.abrir===r.id) a += `<div class="drawer"><label class="lbl" for="motivo">Motivo (opcional, vai junto na mensagem)</label><textarea class="inp" id="motivo" oninput="PA.motivo=this.value" placeholder="Ex.: Tive um imprevisto nesse horário.">${esc(PA.motivo)}</textarea>
       <p class="hint">O horário volta a ficar livre na página de agendamento.</p>
       <div class="row"><button class="btn btn-bad btn-sm grow" type="button" onclick="recusar('${r.id}')">${r.status==="aprovado" ? "Desmarcar e avisar" : "Recusar e avisar"}</button><button class="btn btn-ghost btn-sm" type="button" onclick="abrirMotivo('${r.id}')">Voltar</button></div></div>`;
+  if (PA.pag===r.id) a += `<div class="drawer"><span class="lbl">Como ${esc(prim(r.cliente))} pagou ${reais(r.preco)}?</span><div class="row" style="flex-wrap:wrap">${FORMAS().map(f => `<button class="btn btn-sec btn-sm" type="button" onclick="pagar('${r.id}','${f}')">${f}</button>`).join("")}<button class="btn btn-ghost btn-sm" type="button" onclick="abrirPag('${r.id}')">Cancelar</button></div><p class="hint">Entra no relatório como recebido. Dá para desfazer depois.</p></div>`;
   if (PA.repetir===r.id){ const wd = semFeira(DIAS_L[parse(r.data).getDay()]);
-    a += r.serie ? `<div class="drawer"><span class="lbl">Horário fixo toda ${wd} às ${r.hora}</span><p class="hint">Os próximos já estão reservados e não aparecem para outros clientes.</p>
-        <div class="row"><button class="btn btn-sec btn-sm grow" type="button" onclick="repetir('${r.id}',4)">Reservar mais 4 semanas</button><button class="btn btn-bad btn-sm grow" type="button" onclick="pararSerie('${r.id}')">Encerrar a partir daqui</button><button class="btn btn-ghost btn-sm" type="button" onclick="abrirRepetir('${r.id}')">Fechar</button></div></div>`
-      : `<div class="drawer"><span class="lbl">Reservar toda ${wd} às ${r.hora} pelas próximas:</span><div class="row">${[4,8,12].map(n => `<button class="btn btn-pri btn-sm" type="button" onclick="repetir('${r.id}',${n})">${n} semanas</button>`).join("")}<button class="btn btn-ghost btn-sm" type="button" onclick="abrirRepetir('${r.id}')">Cancelar</button></div><p class="hint">Se alguma semana já estiver ocupada, ela é pulada e eu te aviso.</p></div>`; }
+    a += r.serie ? (semFim(r) ? `<div class="drawer"><span class="lbl">Toda ${wd} às ${r.hora}, sem data para acabar</span><p class="hint">Sempre ficam reservadas as próximas 12 semanas. O sistema reserva as seguintes sozinho, até você encerrar.</p>
+        <div class="row"><button class="btn btn-bad btn-sm grow" type="button" onclick="pararSerie('${r.id}')">Encerrar a partir daqui</button><button class="btn btn-ghost btn-sm" type="button" onclick="abrirRepetir('${r.id}')">Fechar</button></div></div>`
+      : `<div class="drawer"><span class="lbl">Horário fixo toda ${wd} às ${r.hora}</span><p class="hint">Os próximos já estão reservados e não aparecem para outros clientes.</p>
+        <div class="row" style="flex-wrap:wrap"><button class="btn btn-pri btn-sm grow" type="button" onclick="repetir('${r.id}',-1)">${ic("repeat")} Deixar sem data para acabar</button><button class="btn btn-sec btn-sm grow" type="button" onclick="repetir('${r.id}',4)">Reservar mais 4 semanas</button><button class="btn btn-bad btn-sm grow" type="button" onclick="pararSerie('${r.id}')">Encerrar a partir daqui</button><button class="btn btn-ghost btn-sm" type="button" onclick="abrirRepetir('${r.id}')">Fechar</button></div></div>`)
+      : `<div class="drawer"><span class="lbl">Reservar toda ${wd} às ${r.hora}:</span><div class="row" style="flex-wrap:wrap"><button class="btn btn-pri btn-sm" type="button" onclick="repetir('${r.id}',-1)">Sem data para acabar</button>${[4,8,12].map(n => `<button class="btn btn-sec btn-sm" type="button" onclick="repetir('${r.id}',${n})">${n} semanas</button>`).join("")}<button class="btn btn-ghost btn-sm" type="button" onclick="abrirRepetir('${r.id}')">Cancelar</button></div><p class="hint">"Sem data para acabar" é para cliente fixo: o horário fica reservado toda semana até você encerrar. Se alguma semana já estiver ocupada, ela é pulada e eu te aviso.</p></div>`; }
   return `<article class="card ${k} ${PA.flash===r.id ? "flash" : ""}" id="card-${r.id}"><div class="time">${r.hora}<small>até ${fimDe(r)}</small></div>
     <div class="info"><span class="nm">${esc(r.cliente)}</span><span class="sv">${esc(r.servico)} · ${r.duracao} min · ${reais(r.preco)}</span><div class="chips">${ch.join("")}</div></div>
     ${ativa(r) ? notaBox(r.telefone, r.cliente, onde+r.id) : ""}${a}</article>`;
@@ -1841,12 +1866,12 @@ function listaClientes(){
       body = `<div class="cbody">${notaBox(x.tel, x.nome, "c")}
         ${ed ? `<div class="drawer" style="margin-top:0;padding-top:0;border-top:0"><span class="lbl">Editar dados</span>
           <div class="field"><label for="ecNome">Nome</label><input class="inp" id="ecNome" value="${esc(ed.nome)}" oninput="PA.editCli.nome=this.value"></div>
-          <div class="two"><div class="field"><label for="ecTel">WhatsApp</label><input class="inp" id="ecTel" type="tel" inputmode="numeric" value="${esc(ed.novo)}" oninput="this.value=mascara(this.value);PA.editCli.novo=this.value"></div>
+          <div class="two"><div class="field"><label for="ecTel">WhatsApp <span class="opt">(opcional)</span></label><input class="inp" id="ecTel" type="tel" inputmode="numeric" value="${esc(ed.novo)}" oninput="this.value=mascara(this.value);PA.editCli.novo=this.value"></div>
           <div class="field"><label for="ecEmail">E-mail <span class="opt">(opcional)</span></label><input class="inp" id="ecEmail" type="email" value="${esc(ed.email)}" oninput="PA.editCli.email=this.value"></div></div>
           <p class="hint">Muda em todos os horários dessa pessoa, inclusive os já marcados.</p>${ed.erro ? `<p class="err" role="alert">${esc(ed.erro)}</p>` : ""}
           <div class="row"><button class="btn btn-pri btn-sm grow" type="button" onclick="salvarCliente()">${ic("check")} Salvar dados</button><button class="btn btn-ghost btn-sm" type="button" onclick="PA.editCli=null;render()">Cancelar</button></div></div>` : ""}
         <div class="hist"><div><span>WhatsApp</span><b class="tnum">${telF(x.tel)}</b></div><div><span>E-mail</span>${x.email ? `<b style="overflow-wrap:anywhere;text-align:right">${esc(x.email)}</b>` : `<span>não informado</span>`}</div></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-pri btn-sm" type="button" onclick='abrirNovo("", ${JSON.stringify({nome:x.nome, tel:x.tel, email:x.email}).replace(/'/g,"&#39;")})'>${ic("plus")} Marcar horário</button>${notaBtn(x.tel, "c")}<a class="btn btn-soft btn-sm" href="${zap(x.tel, "Olá, "+prim(x.nome)+"!")}" target="_blank" rel="noopener">${ic("chat")} WhatsApp</a>${x.email ? `<button class="btn btn-soft btn-sm" type="button" onclick="copiarTexto('${esc(x.email)}')">${ic("copy")} Copiar e-mail</button>` : ""}${ed ? "" : `<button class="btn btn-soft btn-sm" type="button" onclick='editarCli(${JSON.stringify({tel:x.tel, nome:x.nome, email:x.email}).replace(/'/g,"&#39;")})'>${ic("edit")} Editar dados</button>`}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-pri btn-sm" type="button" onclick='abrirNovo("", ${JSON.stringify({nome:x.nome, tel:x.tel, email:x.email}).replace(/'/g,"&#39;")})'>${ic("plus")} Marcar horário</button>${notaBtn(x.tel, "c")}${temZap(x.tel) ? `<a class="btn btn-soft btn-sm" href="${zap(x.tel, "Olá, "+prim(x.nome)+"!")}" target="_blank" rel="noopener">${ic("chat")} WhatsApp</a>` : ""}${x.email ? `<button class="btn btn-soft btn-sm" type="button" onclick="copiarTexto('${esc(x.email)}')">${ic("copy")} Copiar e-mail</button>` : ""}${ed ? "" : `<button class="btn btn-soft btn-sm" type="button" onclick='editarCli(${JSON.stringify({tel:x.tel, nome:x.nome, email:x.email}).replace(/'/g,"&#39;")})'>${ic("edit")} Editar dados</button>`}</div>
         ${x.prox ? `<div><span class="lbl">Próximo horário</span><div class="hist" style="margin-top:6px"><div><b>${cap(nomeDia(x.prox.data))}, ${x.prox.hora}</b><span>${esc(x.prox.servico)}</span></div></div></div>` : ""}
         ${ult.length ? `<div><span class="lbl">Últimos atendimentos</span><div class="hist" style="margin-top:6px">${ult.map(r => `<div><span>${dataCurta(r.data)} · ${esc(r.servico)}</span>${r.presenca==="faltou" ? '<span class="chip c-bad">Faltou</span>' : r.presenca==="veio" ? '<span class="chip c-ok">Veio</span>' : '<span class="chip c-mute">Sem marcação</span>'}</div>`).join("")}</div></div>` : ""}</div>`; }
     return `<div class="crow ${aberto ? "open" : ""}"><button class="chd" type="button" aria-expanded="${aberto}" onclick="PA.cli=PA.cli==='${x.tel}'?null:'${x.tel}';PA.nota=null;PA.editCli=null;atualizarLista()">
@@ -1893,19 +1918,21 @@ function agruparPeriodo(){
   const sem = todas.filter(r => r.status==="aprovado" && !r.presenca && terminou(r));
   const cont = R.semMarca ? veio.concat(sem) : veio, g = {};
   cont.forEach(r => {
-    const k = dig(r.telefone) || r.cliente, x = g[k] = g[k] || {nome:r.cliente, tel:r.telefone, n:0, tot:0, sv:{}, datas:[]};
-    x.n++; x.tot += r.preco; x.sv[r.servico] = (x.sv[r.servico]||0)+1; x.datas.push(r.data);
+    const k = kc(chaveCli(r.telefone, r.cliente)), x = g[k] = g[k] || {nome:r.cliente, tel:r.telefone, n:0, tot:0, pago:0, aRec:0, sv:{}, datas:[], formas:{}};
+    x.n++; x.tot += r.preco; if (r.pago){ x.pago += r.preco; x.formas[r.forma || "Outro"] = 1; } else x.aRec += r.preco; x.sv[r.servico] = (x.sv[r.servico]||0)+1; x.datas.push(r.data);
   });
   const grupos = Object.values(g).map(x => ({...x, datas:x.datas.sort()})).sort((a,b) => b.tot-a.tot || b.n-a.n || a.nome.localeCompare(b.nome, "pt-BR"));
-  return {cont, grupos, sem, faltas: todas.filter(r => r.presenca==="faltou").length, total: cont.reduce((s,r) => s+r.preco, 0)};
+  const fm = {}; cont.filter(r => r.pago).forEach(r => { const k = r.forma || "Outro"; fm[k] = (fm[k]||0) + r.preco; });
+  return {cont, grupos, sem, faltas: todas.filter(r => r.presenca==="faltou").length, total: cont.reduce((s,r) => s+r.preco, 0),
+    recebido: cont.filter(r => r.pago).reduce((s,r) => s+r.preco, 0), aReceber: cont.filter(r => !r.pago).reduce((s,r) => s+r.preco, 0), formas: fm};
 }
 function baixarCsvPeriodo(){
   const R = PA.rel, A = agruparPeriodo();
   const cel = v => { v = String(v==null ? "" : v); if (/^[=+\-@\t\r]/.test(v)) v = "'"+v; return '"'+v.replace(/"/g,'""')+'"'; };
   const brl = v => String(Number(v).toFixed(2)).replace(".", ",");
-  const linhas = [["Pessoa","WhatsApp","Atendimentos","Serviços","Datas","Total recebido (R$)"].map(cel).join(";")]
-    .concat(A.grupos.map(x => [x.nome, telF(x.tel), x.n, Object.keys(x.sv).map(s => s+" x"+x.sv[s]).join(" | "), x.datas.map(dataCurta).join(" "), brl(x.tot)].map(cel).join(";")))
-    .concat([["TOTAL","",A.cont.length,"","",brl(A.total)].map(cel).join(";")]);
+  const linhas = [["Pessoa","WhatsApp","Atendimentos","Serviços","Datas","Valor total (R$)","Recebido (R$)","A receber (R$)","Formas de pagamento"].map(cel).join(";")]
+    .concat(A.grupos.map(x => [x.nome, temZap(x.tel) ? telF(x.tel) : "", x.n, Object.keys(x.sv).map(s => s+" x"+x.sv[s]).join(" | "), x.datas.map(dataCurta).join(" "), brl(x.tot), brl(x.pago), brl(x.aRec), Object.keys(x.formas).join(" | ")].map(cel).join(";")))
+    .concat([["TOTAL","",A.cont.length,"","",brl(A.total),brl(A.recebido),brl(A.aReceber),""].map(cel).join(";")]);
   const blob = new Blob(["﻿"+linhas.join("\r\n")], {type:"text/csv;charset=utf-8"}), a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = "relatorio-"+R.de+"-a-"+R.ate+".csv"; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -1921,12 +1948,12 @@ function telaPeriodo(){
   const A = agruparPeriodo(), q = A.cont.length;
   h += `<div class="stats"><div class="stat"><span>Pessoas atendidas</span><b>${A.grupos.length}</b><small>no período</small></div>
     <div class="stat"><span>Atendimentos</span><b>${q}</b><small>${R.semMarca ? "com e sem presença marcada" : "com presença marcada"}</small></div>
-    <div class="stat"><span>Recebido</span><b>${reaisC(A.total)}</b><small>soma dos atendimentos</small></div>
+    <div class="stat"><span>Valor dos atendimentos</span><b>${reaisC(A.total)}</b><small>${reaisC(A.recebido)} recebido · ${reaisC(A.aReceber)} a receber</small></div>
     <div class="stat ${A.faltas ? "hot" : ""}"><span>Faltas</span><b>${A.faltas}</b><small>não entram na conta</small></div></div>`;
   if (A.sem.length) h += `<div class="alert"><div><b>${A.sem.length} ${A.sem.length===1?"atendimento sem presença marcada":"atendimentos sem presença marcada"}.</b> ${R.semMarca ? "Eles estão sendo contados agora." : "Eles não entram na lista até você marcar que a pessoa veio."}</div><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-sec btn-sm" type="button" onclick="PA.rel.semMarca=!PA.rel.semMarca;render()">${R.semMarca ? "Contar só quem veio" : "Contar mesmo assim"}</button><button class="btn btn-soft btn-sm" type="button" onclick="PA.aba='agenda';PA.semAg=0;PA.diaAg=hoje();render()">Ir pra agenda</button></div></div>`;
   if (!A.grupos.length) return h + `<div class="empty"><b>Ninguém atendido nesse período</b>Marque a presença na agenda para os atendimentos aparecerem aqui.</div>`;
   h += `<section class="panel"><h3>Quem foi atendido</h3><p>Cada pessoa com os serviços feitos, os dias e quanto rendeu.</p>
-    ${A.grupos.map(x => `<div class="prow"><div><span class="pn">${esc(x.nome)}</span><span class="ps">${Object.keys(x.sv).map(s => esc(s)+" × "+x.sv[s]).join(" · ")}</span><span class="ps tnum">${x.datas.map(dataCurta).join(", ")}</span></div><div class="pv"><b class="tnum">${reais(x.tot)}</b><small>${x.n} ${x.n===1?"atendimento":"atendimentos"}</small></div></div>`).join("")}
+    ${A.grupos.map(x => `<div class="prow"><div><span class="pn">${esc(x.nome)}</span><span class="ps">${Object.keys(x.sv).map(s => esc(s)+" × "+x.sv[s]).join(" · ")}</span><span class="ps tnum">${x.datas.map(dataCurta).join(", ")}</span></div><div class="pv"><b class="tnum">${reais(x.tot)}</b><small>${x.n} ${x.n===1?"atendimento":"atendimentos"}</small>${x.aRec > 0 ? `<small style="color:var(--warn)">${reais(x.aRec)} a receber</small>` : x.tot > 0 ? `<small>✓ tudo pago</small>` : ""}</div></div>`).join("")}
     <div class="prow ptot"><div><span class="pn">Total</span></div><div class="pv"><b class="tnum">${reais(A.total)}</b><small>${q} ${q===1?"atendimento":"atendimentos"}</small></div></div></section>`;
   if (A.total===0) h += `<p class="hint">O valor está zerado porque os serviços estão sem preço. Cadastre o preço em Ajustes, em Serviços. Atendimentos já feitos continuam com o preço de quando foram marcados.</p>`;
   h += `<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-pri btn-sm" type="button" onclick="abrirPdf()">${ic("chart")} Gerar PDF do período</button><button class="btn btn-sec btn-sm" type="button" onclick="baixarCsvPeriodo()">${ic("copy")} Baixar planilha (CSV)</button></div>`;
@@ -1967,7 +1994,9 @@ function resumoPdf(A, R){
   const mesmoMes = R.de.slice(0,7)===R.ate.slice(0,7) && R.de.slice(8)==="01" && addD(R.ate,1).slice(8)==="01";
   const quando = mesmoMes ? "Em "+MES_L[parse(R.de).getMonth()] : "Entre "+dl(R.de)+" e "+dl(R.ate);
   if (!q){ out.push(quando+", nenhum atendimento foi marcado como realizado."); if (A.sem.length) out.push(A.sem.length+" "+(A.sem.length===1?"atendimento já passou e está":"atendimentos já passaram e estão")+" sem presença marcada. Marque na agenda para entrarem no relatório."); return out; }
-  out.push(quando+", você atendeu "+P+" "+(P===1?"pessoa":"pessoas")+" em "+q+" "+(q===1?"atendimento":"atendimentos")+(A.total ? " e recebeu "+reais(A.total)+"." : "."));
+  out.push(quando+", você atendeu "+P+" "+(P===1?"pessoa":"pessoas")+" em "+q+" "+(q===1?"atendimento":"atendimentos")+(A.total ? ", somando "+reais(A.total)+"." : "."));
+  if (A.total) out.push(A.aReceber <= 0 ? "Tudo já foi recebido." : A.recebido <= 0 ? "Nenhum pagamento foi registrado ainda: os "+reais(A.aReceber)+" aparecem como a receber." : "Já recebeu "+reais(A.recebido)+" e falta receber "+reais(A.aReceber)+".");
+  const fk = Object.keys(A.formas || {}).sort((a,b) => A.formas[b]-A.formas[a]); if (fk.length > 1) out.push("A forma de pagamento mais usada foi "+fk[0]+" ("+reais(A.formas[fk[0]])+").");
   if (A.total) out.push("Em média, cada atendimento rendeu "+reais(A.total/q)+(P < q ? ", e cada pessoa veio em média "+(q/P).toLocaleString("pt-BR",{maximumFractionDigits:1})+" vezes." : "."));
   const sv = {}; A.cont.forEach(r => { const x = sv[r.servico] = sv[r.servico] || {n:0, v:0}; x.n++; x.v += r.preco; });
   const ks = Object.keys(sv);
@@ -1996,14 +2025,15 @@ function telaPdf(){
   let h = `<div class="rpt-wrap"><div class="rpt-bar"><button class="btn btn-ghost btn-sm" style="color:#fff" type="button" onclick="fecharPdf()">${ic("left")} Voltar</button><span>Confira e salve como PDF</span><button class="btn btn-pri btn-sm" type="button" onclick="imprimirPdf()">Salvar como PDF</button></div>
     <article class="rpt" style="--rc:${cor}"><div class="r-top"><div><b>${esc(c.nome)}</b><h1>Relatório de atendimentos</h1></div><small>${dl(R.de)} até ${dl(R.ate)}</small></div>
     <div class="r-kpi"><div><span>Pessoas atendidas</span><strong>${P}</strong></div><div><span>Atendimentos</span><strong>${q}</strong><small>${R.semMarca ? "inclui sem presença marcada" : "com presença confirmada"}</small></div>
-      <div><span>Recebido</span><strong>${reaisC(A.total)}</strong>${q && A.total ? `<small>${reaisC(A.total/q)} por atendimento</small>` : ""}</div><div><span>Faltas</span><strong>${A.faltas}</strong><small>${tf}% dos horários</small></div></div>
+      <div><span>Valor dos atendimentos</span><strong>${reaisC(A.total)}</strong>${A.total ? `<small>${reaisC(A.recebido)} recebido · ${reaisC(A.aReceber)} a receber</small>` : ""}</div><div><span>Faltas</span><strong>${A.faltas}</strong><small>${tf}% dos horários</small></div></div>
     <div class="r-txt">${resumoPdf(A, R).map(t => `<p>${esc(t)}</p>`).join("")}</div>`;
   if (q){
     h += `<h2>${tit}</h2>${colunasSvg(sr.itens)}
       <div class="r-two"><div><h2>Serviços</h2>${barrasPdf(Object.values(sv).sort((a,b) => b.v-a.v), i => i.v+(A.total ? " · "+reaisC(i.fat) : ""))}</div><div><h2>Dias da semana</h2>${barrasPdf(wdF)}</div></div>
-      <h2>Quem foi atendido</h2><table><thead><tr><th style="width:44%">Pessoa</th><th class="r-svc">Serviços</th><th class="v">Vezes</th><th class="v">Recebido</th></tr></thead><tbody>
-      ${A.grupos.map(x => `<tr><td><b>${esc(x.nome)}</b><div class="r-svm">${Object.keys(x.sv).map(s => esc(s)+"&nbsp;×&nbsp;"+x.sv[s]).join(" · ")}</div><div class="r-sub">${x.datas.map(dataCurta).join(", ")}</div></td><td class="r-svc">${Object.keys(x.sv).map(s => esc(s)+"&nbsp;×&nbsp;"+x.sv[s]).join("<br>")}</td><td class="v">${x.n}</td><td class="v">${reais(x.tot)}</td></tr>`).join("")}
-      <tr class="tot"><td>Total</td><td class="r-svc"></td><td class="v">${q}</td><td class="v">${reais(A.total)}</td></tr></tbody></table>`;
+      <h2>Quem foi atendido</h2><table><thead><tr><th style="width:44%">Pessoa</th><th class="r-svc">Serviços</th><th class="v">Vezes</th><th class="v">Valor</th></tr></thead><tbody>
+      ${A.grupos.map(x => `<tr><td><b>${esc(x.nome)}</b><div class="r-svm">${Object.keys(x.sv).map(s => esc(s)+"&nbsp;×&nbsp;"+x.sv[s]).join(" · ")}</div><div class="r-sub">${x.datas.map(dataCurta).join(", ")}</div></td><td class="r-svc">${Object.keys(x.sv).map(s => esc(s)+"&nbsp;×&nbsp;"+x.sv[s]).join("<br>")}</td><td class="v">${x.n}</td><td class="v">${reais(x.tot)}${x.aRec > 0 ? `<div class="r-sub">${reais(x.aRec)} a receber</div>` : ""}</td></tr>`).join("")}
+      <tr class="tot"><td>Total</td><td class="r-svc"></td><td class="v">${q}</td><td class="v">${reais(A.total)}${A.aReceber > 0 ? `<div class="r-sub">${reais(A.aReceber)} a receber</div>` : ""}</td></tr></tbody></table>`;
+    const fk = Object.keys(A.formas || {}); if (fk.length) h = h.replace('<h2>Quem foi atendido</h2>', `<h2>Formas de pagamento</h2>${barrasPdf(fk.map(k => ({l:k, v:A.formas[k]})).sort((a,b) => b.v-a.v), i => reaisC(i.v))}<h2>Quem foi atendido</h2>`);
   }
   h += `<p class="r-foot">Gerado pelo Hora Marcada em ${dl(hoje())}. Contém dados de clientes: guarde e compartilhe com cuidado.</p></article></div>`;
   return h;
@@ -2024,7 +2054,8 @@ function telaRelatorio(){
   const sv = {}; validos.forEach(r => { const x = (sv[r.servico] = sv[r.servico] || {l:r.servico, v:0, fat:0}); x.v++; if (r.presenca==="veio") x.fat += r.preco; });
   const wd = [1,2,3,4,5,6,0].filter(d => PC().dias.includes(d) || validos.some(r => parse(r.data).getDay()===d)).map(d => ({l:DIAS_L[d].replace("-feira",""), v:validos.filter(r => parse(r.data).getDay()===d).length}));
   let h = cabecalho("Relatório", cap(MES_L[m0.getMonth()])+" de "+m0.getFullYear(), togMes());
-  h += `<div class="stats"><div class="stat"><span>Faturamento</span><b>${reaisC(soma(veio))}</b><small>${atual && falta.length ? "+ "+reaisC(soma(falta))+" ainda agendados" : "de quem compareceu"}</small></div>
+  const pagos = veio.filter(r => r.pago), aRec = veio.filter(r => !r.pago && r.preco > 0);
+  h += `<div class="stats"><div class="stat"><span>Faturamento</span><b>${reaisC(soma(veio))}</b><small>${reaisC(soma(pagos))} recebido · ${reaisC(soma(aRec))} a receber</small></div>
     <div class="stat"><span>Atendimentos</span><b>${veio.length}</b><small>realizados</small></div>
     <div class="stat ${taxa >= 15 ? "hot" : ""}"><span>Faltas</span><b>${taxa}%</b><small>${faltou.length} ${faltou.length===1?"falta":"faltas"}</small></div>
     <div class="stat"><span>Clientes novos</span><b>${novos}</b><small>primeira vez</small></div></div>`;
@@ -2035,6 +2066,10 @@ function telaRelatorio(){
     ${(org.direto||0)/tot > .4 ? `<p class="hint">Muita gente aparece como "Link direto". Use o link com <b>&amp;o=instagram</b> na bio e <b>&amp;o=google</b> no Google Meu Negócio pra saber de onde vêm de verdade.</p>` : ""}</section>`;
   h += `<section class="panel"><h3>Serviços</h3><p>Quantas vezes cada um foi agendado e quanto rendeu com quem compareceu.</p>${barras(Object.values(sv).sort((a,b) => b.v-a.v), i => i.v+" · "+reaisC(i.fat))}</section>`;
   h += `<section class="panel"><h3>Dias mais procurados</h3>${barras(wd)}</section>`;
+  if (aRec.length) h += `<section class="panel"><h3>A receber</h3><p>${aRec.length} ${aRec.length===1?"atendimento realizado ainda sem pagamento registrado":"atendimentos realizados ainda sem pagamento registrado"}, somando ${reais(soma(aRec))}.</p>
+    ${aRec.sort((a,b) => (a.data+a.hora).localeCompare(b.data+b.hora)).map(r => `<div class="prow"><div><span class="pn">${esc(r.cliente)}</span><span class="ps">${dataCurta(r.data)} · ${esc(r.servico)}</span></div><div class="pv"><b class="tnum">${reais(r.preco)}</b>${PA.pag===r.id ? "" : `<button class="btn btn-soft btn-sm" style="margin-top:4px" type="button" onclick="abrirPag('${r.id}')">Recebi</button>`}</div></div>${PA.pag===r.id ? `<div class="row" style="flex-wrap:wrap;margin:-4px 0 10px">${FORMAS().map(f => `<button class="btn btn-sec btn-sm" type="button" onclick="pagar('${r.id}','${f}')">${f}</button>`).join("")}<button class="btn btn-ghost btn-sm" type="button" onclick="abrirPag('${r.id}')">Cancelar</button></div>` : ""}`).join("")}</section>`;
+  if (pagos.length){ const fm = {}; pagos.forEach(r => { const k = r.forma || "Outro"; fm[k] = (fm[k]||0) + r.preco; });
+    h += `<section class="panel"><h3>Formas de pagamento</h3><p>Do que já foi recebido no mês.</p>${barras(Object.keys(fm).map(k => ({l:k, v:fm[k]})).sort((a,b) => b.v-a.v), i => reaisC(i.v))}</section>`; }
   h += `<p class="hint">${canc} ${canc===1?"cancelamento feito pelo cliente":"cancelamentos feitos pelos clientes"} e ${rec} ${rec===1?"recusa sua":"recusas suas"} neste mês.</p>`;
   return h;
 }
