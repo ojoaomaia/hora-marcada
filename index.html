@@ -325,6 +325,49 @@ input[type=date].inp,input[type=time].inp{min-width:0}
 .prow .pv small{display:block;color:var(--muted);font-size:12.5px}
 .ptot{border-top:2px solid var(--line)}
 .ptot .pn,.ptot .pv b{font-size:16px}
+/* relatório em PDF: folha clara, independente do tema do painel */
+.rpt-wrap{min-height:100vh;background:#E9EBEF;padding:0 0 40px}
+.rpt-bar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 16px;background:#111827;color:#fff}
+.rpt-bar span{font-size:14px;opacity:.85}
+.rpt-bar .btn{font-size:14px}
+.rpt{max-width:800px;margin:20px auto 0;background:#fff;color:#111827;padding:36px 40px;border-radius:6px;box-shadow:0 4px 24px rgba(0,0,0,.12);font-size:13.5px;line-height:1.5;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.rpt h1{font-size:22px;margin:0;color:#111827}
+.rpt h2{font-size:15px;margin:26px 0 10px;color:#111827;break-after:avoid}
+.rpt .r-top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;border-bottom:3px solid var(--rc);padding-bottom:12px;flex-wrap:wrap}
+.rpt .r-top b{display:block;font-size:13px;color:var(--rc);text-transform:uppercase;letter-spacing:.06em}
+.rpt .r-top small{color:#6B7280;font-size:12.5px}
+.rpt .r-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+.rpt .r-kpi div{border:1px solid #E5E7EB;border-radius:10px;padding:10px 12px}
+.rpt .r-kpi span{display:block;font-size:11.5px;color:#6B7280}
+.rpt .r-kpi strong{display:block;font-size:19px;color:#111827;margin-top:2px;font-variant-numeric:tabular-nums}
+.rpt .r-kpi small{display:block;font-size:11.5px;color:#6B7280}
+.rpt .r-txt{background:#F6F7F9;border-left:3px solid var(--rc);border-radius:6px;padding:12px 14px;margin-top:18px}
+.rpt .r-txt p{margin:0 0 6px;color:#1F2937}
+.rpt .r-txt p:last-child{margin:0}
+.rpt .r-two{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.rpt .r-hb{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,2fr) max-content;gap:6px 10px;align-items:center;font-size:12.5px}
+.rpt .r-hb .t{height:10px;background:#EEF0F3;border-radius:5px;overflow:hidden}
+.rpt .r-hb .t i{display:block;height:100%;background:var(--rc);border-radius:5px}
+.rpt .r-hb .n{font-variant-numeric:tabular-nums;color:#374151;white-space:nowrap}
+.rpt .r-hb .l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpt table{width:100%;border-collapse:collapse;font-size:12.5px}
+.rpt th{text-align:left;font-weight:600;color:#6B7280;font-size:11.5px;border-bottom:1px solid #D1D5DB;padding:6px 6px 6px 0}
+.rpt td{border-bottom:1px solid #EEF0F3;padding:7px 6px 7px 0;vertical-align:top}
+.rpt td.v,.rpt th.v{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;padding-right:0}
+.rpt tr{break-inside:avoid}
+.rpt tfoot td{font-weight:700;border-bottom:0;border-top:2px solid #D1D5DB}
+.rpt .r-sub{color:#6B7280;font-size:11.5px}
+.rpt .r-foot{margin-top:24px;color:#9CA3AF;font-size:11px;text-align:center}
+@media (max-width:640px){.rpt{margin:0;border-radius:0;padding:22px 16px;box-shadow:none}.rpt .r-kpi{grid-template-columns:1fr 1fr}.rpt .r-two{grid-template-columns:1fr;gap:4px}}
+@media print{
+  @page{size:A4;margin:14mm}
+  html,body{background:#fff!important}
+  #demoBar,.rpt-bar,#toast{display:none!important}
+  .rpt-wrap{background:#fff;padding:0;min-height:0}
+  .rpt{box-shadow:none;margin:0;max-width:none;padding:0;border-radius:0}
+  .rpt .r-kpi{grid-template-columns:repeat(4,1fr)}
+  .rpt .r-two{grid-template-columns:1fr 1fr}
+}
 .summary{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;color:var(--muted)}
 .summary b{color:var(--ink);font-weight:600}
 .bar{height:6px;border-radius:999px;background:var(--surface-2);overflow:hidden}
@@ -1649,7 +1692,9 @@ const ABAS = [["inicio","Início","home"],["pedidos","Pedidos","inbox"],["agenda
 function renderPainel(){
   const app = document.getElementById("app");
   if (!PA.d){ setBrand("#5B5BD6"); app.innerHTML = PA.carregando ? `<div class="login"><div class="lcard"><div class="skel" style="height:300px"></div></div></div>` : telaLogin(); return; }
-  setBrand(PC().cor); document.title = PC().nome+" · Painel";
+  setBrand(PC().cor);
+  if (PA.pdf && PA.aba==="relatorio" && PA.rel.lista){ app.innerHTML = telaPdf(); return; }
+  PA.pdf = false; document.title = PC().nome+" · Painel";
   const pend = PA.d.reservas.filter(r => r.status==="pendente" && r.data >= hoje()).length + PA.d.reservas.filter(r => r.aviso && r.status==="cancelado" && r.data >= hoje()).length;
   const nav = (cls) => ABAS.filter(([k]) => k!=="pedidos" || mostraPedidos()).map(([k,l,i]) => `<button class="${cls}" type="button" ${PA.aba===k ? 'aria-current="page"' : ""} onclick="irAba('${k}')">${ic(i)}<span>${l}</span>${k==="pedidos" && pend ? `<span class="badge-n">${pend}</span>` : ""}</button>`).join("");
   let corpo = "";
@@ -1871,7 +1916,83 @@ function telaPeriodo(){
     ${A.grupos.map(x => `<div class="prow"><div><span class="pn">${esc(x.nome)}</span><span class="ps">${Object.keys(x.sv).map(s => esc(s)+" × "+x.sv[s]).join(" · ")}</span><span class="ps tnum">${x.datas.map(dataCurta).join(", ")}</span></div><div class="pv"><b class="tnum">${reais(x.tot)}</b><small>${x.n} ${x.n===1?"atendimento":"atendimentos"}</small></div></div>`).join("")}
     <div class="prow ptot"><div><span class="pn">Total</span></div><div class="pv"><b class="tnum">${reais(A.total)}</b><small>${q} ${q===1?"atendimento":"atendimentos"}</small></div></div></section>`;
   if (A.total===0) h += `<p class="hint">O valor está zerado porque os serviços estão sem preço. Cadastre o preço em Ajustes, em Serviços. Atendimentos já feitos continuam com o preço de quando foram marcados.</p>`;
-  h += `<div class="row"><button class="btn btn-sec btn-sm" type="button" onclick="baixarCsvPeriodo()">${ic("copy")} Baixar planilha (CSV)</button></div>`;
+  h += `<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-pri btn-sm" type="button" onclick="abrirPdf()">${ic("chart")} Gerar PDF do período</button><button class="btn btn-sec btn-sm" type="button" onclick="baixarCsvPeriodo()">${ic("copy")} Baixar planilha (CSV)</button></div>`;
+  return h;
+}
+/* ---------- relatório em PDF (página pronta para "Salvar como PDF") ---------- */
+function abrirPdf(){ PA.pdf = true; render(); scrollTo(0,0); }
+function fecharPdf(){ PA.pdf = false; render(); scrollTo(0,0); }
+function imprimirPdf(){ try{ window.print(); }catch(e){ toast("Use o menu do navegador: Imprimir > Salvar como PDF."); } }
+const semanaIni = s => { const d = parse(s); return addD(s, -((d.getDay()+6)%7)); };
+function seriePdf(cont, de, ate){
+  const dias = Math.round((parse(ate)-parse(de))/864e5)+1, m = {}, chaves = [];
+  const modo = dias <= 31 ? "dia" : dias <= 120 ? "semana" : "mes";
+  if (modo==="dia") for (let i = 0; i < dias; i++) chaves.push(addD(de, i));
+  if (modo==="semana") for (let s = semanaIni(de); s <= ate; s = addD(s, 7)) chaves.push(s);
+  if (modo==="mes"){ let d = parse(de); d = new Date(d.getFullYear(), d.getMonth(), 1, 12); while (ymd(d).slice(0,7) <= ate.slice(0,7)){ chaves.push(ymd(d).slice(0,7)); d = new Date(d.getFullYear(), d.getMonth()+1, 1, 12); } }
+  chaves.forEach(k => m[k] = 0);
+  cont.forEach(r => { const k = modo==="dia" ? r.data : modo==="semana" ? semanaIni(r.data) : r.data.slice(0,7); if (k in m) m[k]++; });
+  const lab = k => modo==="mes" ? cap(MES_L[+k.slice(5,7)-1]).slice(0,3) : dataCurta(k);
+  return {modo, itens: chaves.map(k => ({l: lab(k), v: m[k]}))};
+}
+function colunasSvg(itens){
+  const W = 700, H = 190, pl = 30, pb = 24, pt = 16, n = Math.max(1, itens.length), max = Math.max(1, ...itens.map(i => i.v));
+  const bw = (W-pl)/n, ah = H-pt-pb, passo = n > 16 ? Math.ceil(n/12) : 1;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Atendimentos ao longo do período" style="display:block">`;
+  [0, .5, 1].forEach(f => { const y = (pt + ah*(1-f)).toFixed(1); s += `<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" stroke="#E5E7EB"/>`; if (f===0 || f===1 || max >= 4) s += `<text x="${pl-6}" y="${+y+4}" text-anchor="end" font-size="11" fill="#6B7280">${Math.round(max*f)}</text>`; });
+  itens.forEach((it, i) => {
+    const h = ah*it.v/max, x = pl + i*bw + bw*.16, w = Math.max(2, bw*.68), y = pt + ah - h;
+    if (it.v) s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--rc)"/>`;
+    if (it.v && n <= 16) s += `<text x="${(x+w/2).toFixed(1)}" y="${(y-4).toFixed(1)}" text-anchor="middle" font-size="11" fill="#374151">${it.v}</text>`;
+    if (i % passo === 0) s += `<text x="${(x+w/2).toFixed(1)}" y="${H-6}" text-anchor="middle" font-size="10.5" fill="#6B7280">${esc(it.l)}</text>`;
+  });
+  return s + `</svg>`;
+}
+const barrasPdf = (itens, fmt) => { const max = Math.max(1, ...itens.map(i => i.v)); return `<div class="r-hb">${itens.map(i => `<span class="l">${esc(i.l)}</span><span class="t"><i style="width:${i.v ? Math.max(3, i.v/max*100) : 0}%"></i></span><span class="n">${fmt ? fmt(i) : i.v}</span>`).join("")}</div>`; };
+function resumoPdf(A, R){
+  const dl = s => { const d = parse(s); return d.getDate()+" de "+MES_L[d.getMonth()]; }, q = A.cont.length, P = A.grupos.length, out = [];
+  const mesmoMes = R.de.slice(0,7)===R.ate.slice(0,7) && R.de.slice(8)==="01" && addD(R.ate,1).slice(8)==="01";
+  const quando = mesmoMes ? "Em "+MES_L[parse(R.de).getMonth()] : "Entre "+dl(R.de)+" e "+dl(R.ate);
+  if (!q){ out.push(quando+", nenhum atendimento foi marcado como realizado."); if (A.sem.length) out.push(A.sem.length+" "+(A.sem.length===1?"atendimento já passou e está":"atendimentos já passaram e estão")+" sem presença marcada. Marque na agenda para entrarem no relatório."); return out; }
+  out.push(quando+", você atendeu "+P+" "+(P===1?"pessoa":"pessoas")+" em "+q+" "+(q===1?"atendimento":"atendimentos")+(A.total ? " e recebeu "+reais(A.total)+"." : "."));
+  if (A.total) out.push("Em média, cada atendimento rendeu "+reais(A.total/q)+(P < q ? ", e cada pessoa veio em média "+(q/P).toLocaleString("pt-BR",{maximumFractionDigits:1})+" vezes." : "."));
+  const sv = {}; A.cont.forEach(r => { const x = sv[r.servico] = sv[r.servico] || {n:0, v:0}; x.n++; x.v += r.preco; });
+  const ks = Object.keys(sv);
+  if (ks.length > 1){
+    const topN = ks.sort((a,b) => sv[b].n-sv[a].n)[0], topV = ks.slice().sort((a,b) => sv[b].v-sv[a].v)[0];
+    out.push(topN+" foi o mais procurado, com "+sv[topN].n+" de "+q+" atendimentos ("+Math.round(sv[topN].n/q*100)+"%)."+(A.total && topV!==topN ? " Em valor, "+topV+" rendeu mais: "+reais(sv[topV].v)+"." : ""));
+  }
+  const wd = [0,0,0,0,0,0,0]; A.cont.forEach(r => wd[parse(r.data).getDay()]++);
+  const dmax = wd.indexOf(Math.max(...wd)); if (q >= 5) out.push(cap(DIAS_L[dmax])+" foi o dia mais movimentado, com "+wd[dmax]+" atendimentos.");
+  const tf = A.faltas + q ? Math.round(A.faltas/(A.faltas+q)*100) : 0;
+  if (A.faltas) out.push("Houve "+A.faltas+" "+(A.faltas===1?"falta":"faltas")+" ("+tf+"% dos horários)."+(tf >= 15 ? " É uma taxa alta: confirmar o horário na véspera pelo WhatsApp costuma ajudar." : tf <= 5 ? " Uma taxa baixa, ótimo sinal." : ""));
+  else if (q >= 5) out.push("Nenhuma falta no período.");
+  if (A.sem.length && !R.semMarca) out.push(A.sem.length+" "+(A.sem.length===1?"atendimento já passado está":"atendimentos já passados estão")+" sem presença marcada e não "+(A.sem.length===1?"entra":"entram")+" nestes números.");
+  if (!A.total) out.push("Os valores aparecem zerados porque os serviços estão sem preço cadastrado.");
+  return out;
+}
+function telaPdf(){
+  const R = PA.rel, A = agruparPeriodo(), c = PC(), q = A.cont.length, P = A.grupos.length;
+  const dl = s => { const d = parse(s); return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear(); };
+  document.title = "Relatório "+c.nome+" "+dl(R.de).replace(/\//g,"-")+" a "+dl(R.ate).replace(/\//g,"-");
+  const cor = /^#[0-9a-fA-F]{6}$/.test(c.cor||"") ? c.cor : "#5B5BD6";
+  const sr = seriePdf(A.cont, R.de, R.ate), tit = {dia:"Atendimentos por dia", semana:"Atendimentos por semana", mes:"Atendimentos por mês"}[sr.modo];
+  const sv = {}; A.cont.forEach(r => { const x = sv[r.servico] = sv[r.servico] || {l:r.servico, v:0, fat:0}; x.v++; x.fat += r.preco; });
+  const wdF = [1,2,3,4,5,6,0].map(d => ({d, l: cap(DIAS_L[d].replace("-feira","")), v: A.cont.filter(r => parse(r.data).getDay()===d).length})).filter(x => x.v || (c.dias || []).includes(x.d));
+  const tf = A.faltas + q ? Math.round(A.faltas/(A.faltas+q)*100) : 0;
+  let h = `<div class="rpt-wrap"><div class="rpt-bar"><button class="btn btn-ghost btn-sm" style="color:#fff" type="button" onclick="fecharPdf()">${ic("left")} Voltar</button><span>Confira e salve como PDF</span><button class="btn btn-pri btn-sm" type="button" onclick="imprimirPdf()">Salvar como PDF</button></div>
+    <article class="rpt" style="--rc:${cor}"><div class="r-top"><div><b>${esc(c.nome)}</b><h1>Relatório de atendimentos</h1></div><small>${dl(R.de)} até ${dl(R.ate)}</small></div>
+    <div class="r-kpi"><div><span>Pessoas atendidas</span><strong>${P}</strong></div><div><span>Atendimentos</span><strong>${q}</strong><small>${R.semMarca ? "inclui sem presença marcada" : "com presença confirmada"}</small></div>
+      <div><span>Recebido</span><strong>${reaisC(A.total)}</strong>${q && A.total ? `<small>${reaisC(A.total/q)} por atendimento</small>` : ""}</div><div><span>Faltas</span><strong>${A.faltas}</strong><small>${tf}% dos horários</small></div></div>
+    <div class="r-txt">${resumoPdf(A, R).map(t => `<p>${esc(t)}</p>`).join("")}</div>`;
+  if (q){
+    h += `<h2>${tit}</h2>${colunasSvg(sr.itens)}
+      <div class="r-two"><div><h2>Serviços</h2>${barrasPdf(Object.values(sv).sort((a,b) => b.v-a.v), i => i.v+(A.total ? " · "+reaisC(i.fat) : ""))}</div><div><h2>Dias da semana</h2>${barrasPdf(wdF)}</div></div>
+      <h2>Quem foi atendido</h2><table><thead><tr><th>Pessoa</th><th>Serviços</th><th class="v">Vezes</th><th class="v">Recebido</th></tr></thead><tbody>
+      ${A.grupos.map(x => `<tr><td><b>${esc(x.nome)}</b><div class="r-sub">${x.datas.map(dataCurta).join(", ")}</div></td><td>${Object.keys(x.sv).map(s => esc(s)+" × "+x.sv[s]).join("<br>")}</td><td class="v">${x.n}</td><td class="v">${reais(x.tot)}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td>Total</td><td></td><td class="v">${q}</td><td class="v">${reais(A.total)}</td></tr></tfoot></table>`;
+  }
+  h += `<p class="r-foot">Gerado pelo Hora Marcada em ${dl(hoje())}. Contém dados de clientes: guarde e compartilhe com cuidado.</p></article></div>`;
   return h;
 }
 function telaRelatorio(){
